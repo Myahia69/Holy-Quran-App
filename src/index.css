@@ -1,0 +1,88 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Amiri:ital,wght@0,400;0,700;1,400&family=Scheherazade+New:wght@400;700&family=Cinzel:wght@500;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-amiri: "Amiri", serif;
+  --font-scheherazade: "Scheherazade New", serif;
+  --font-cinzel: "Cinzel", serif;
+  
+  --color-gold-50: #fefcf0;
+  --color-gold-100: #fcf4cf;
+  --color-gold-200: #f8e5a0;
+  --color-gold-300: #efcb68;
+  --color-gold-400: #d4af37;
+  --color-gold-500: #b8972f;
+  --color-gold-600: #a18125;
+  --color-gold-700: #85691d;
+  --color-gold-800: #6e551a;
+  --color-gold-900: #554114;
+  --color-gold-950: #302409;
+  
+  --color-emerald-50: #f0fdf4;
+  --color-emerald-100: #dcfce7;
+  --color-emerald-200: #bbf7d0;
+  --color-emerald-800: #064e3b;
+  --color-emerald-850: #043e2e;
+  --color-emerald-900: #062f1c;
+  --color-emerald-950: #021c10;
+}
+
+/* Custom styled inputs & scrollbars */
+input[type="range"]::-webkit-slider-thumb {
+  border-radius: 9999px;
+  background-color: #d4af37;
+}
+
+/* Scrollbar behaviors for aesthetic design */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(212, 175, 55, 0.2);
+  border-radius: 10px;
+  border: 2px solid transparent;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 175, 55, 0.4);
+}
+
+/* Quranic visual elements */
+.islamic-border-double {
+  border: 4px double #d4af37;
+}
+
+.islamic-glow {
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.15);
+}
+
+.islamic-glow-strong {
+  box-shadow: 0 0 30px rgba(212, 175, 55, 0.3);
+}
+
+.islamic-star {
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+
+.bg-pattern-islamic {
+  background-image: radial-gradient(circle at 1px 1px, rgba(212, 175, 55, 0.05) 1px, transparent 0);
+  background-size: 16px 16px;
+}
+
+.bg-cream-velvet {
+  background-color: #fdfaf2;
+}
+
+.bg-cream-gold-card {
+  background-color: #fcf8ee;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+}
+

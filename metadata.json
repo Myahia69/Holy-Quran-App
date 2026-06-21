@@ -1,0 +1,6 @@
+{
+  "name": "Holy Quran App",
+  "description": "A high-performance, responsive web application for reading, translating, listening, and studying Tafsir of the Holy Quran.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
