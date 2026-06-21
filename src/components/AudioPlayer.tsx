@@ -19,8 +19,11 @@ import {
   AlertCircle,
   Clock,
   ExternalLink,
+  Download,
+  Check,
+  Trash2,
 } from 'lucide-react';
-import { fetchAudioFile, POPULAR_RECITERS } from '../services/quranApi';
+import { fetchAudioFile, POPULAR_RECITERS, isAudioFileDownloaded, downloadAudioFile, deleteOfflineAudioFile } from '../services/quranApi';
 import { AudioFile, VerseTiming } from '../types';
 
 interface AudioPlayerProps {
@@ -83,6 +86,64 @@ export default function AudioPlayer({
   timingsRef.current = audioData?.verse_timings || [];
 
   const isArabic = activeLanguage === 'ar';
+
+  const [isDownloaded, setIsDownloaded] = useState<boolean>(false);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+
+  // Sync / check offline download status whenever surah or reciter changes
+  useEffect(() => {
+    let isMounted = true;
+    const checkOfflineStatus = async () => {
+      const status = await isAudioFileDownloaded(reciterId, activeSurah);
+      if (isMounted) {
+        setIsDownloaded(status);
+      }
+    };
+    checkOfflineStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeSurah, reciterId, isDownloading]);
+
+  const handleDownload = async () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    setDownloadProgress(0);
+    try {
+      await downloadAudioFile(reciterId, activeSurah, (progress) => {
+        setDownloadProgress(progress);
+      });
+      setIsDownloaded(true);
+      // Reload audio to switch to offline Object URL!
+      onActiveVerseChange('');
+      const file = await fetchAudioFile(reciterId, activeSurah);
+      if (file) {
+        setAudioData(file);
+      }
+    } catch (err) {
+      console.error('Download offline error:', err);
+      alert(isArabic ? 'حدث خطأ أثناء تحميل السورة للاستماع دون اتصال بالإنترنت.' : 'Error downloading Surah for offline play.');
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress(null);
+    }
+  };
+
+  const handleDeleteDownload = async () => {
+    try {
+      await deleteOfflineAudioFile(reciterId, activeSurah);
+      setIsDownloaded(false);
+      // Re-load online audio URL
+      onActiveVerseChange('');
+      const file = await fetchAudioFile(reciterId, activeSurah);
+      if (file) {
+        setAudioData(file);
+      }
+    } catch (err) {
+      console.error('Delete offline error:', err);
+    }
+  };
 
   // Load Audio File when surah or reciter changes
   useEffect(() => {
@@ -559,6 +620,36 @@ export default function AudioPlayer({
 
         {/* Rightside: Reciter dropdown slider & Volume controls */}
         <div className="flex items-center justify-end gap-3 md:min-w-[240px]" id="player-volume-pane">
+          {/* Offline Download Button */}
+          {isDownloading ? (
+            <div className="flex items-center gap-1 bg-gold-400/25 border border-gold-400/30 text-gold-300 px-2.5 py-1.5 rounded-lg text-[10px] font-bold animate-pulse" id="downloading-indicator">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-gold-400" />
+              <span>{downloadProgress}%</span>
+            </div>
+          ) : isDownloaded ? (
+            <button
+              id="btn-delete-offline"
+              onClick={handleDeleteDownload}
+              title={isArabic ? 'السورة محملة وجاهزة للاستماع دون اتصال. انقر لحذف الملف' : 'Surah downloaded offline. Click to remove'}
+              className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-emerald-900/50 hover:bg-rose-900/25 border border-emerald-500/30 hover:border-rose-500/30 text-emerald-300 hover:text-rose-300 rounded-lg transition cursor-pointer group"
+            >
+              <Check className="w-3.5 h-3.5 group-hover:hidden shrink-0 text-emerald-400" />
+              <Trash2 className="w-3.5 h-3.5 hidden group-hover:block shrink-0" />
+              <span className="text-[10px] font-bold group-hover:block hidden">{isArabic ? 'حذف' : 'Remove'}</span>
+              <span className="text-[10px] font-bold group-hover:hidden">{isArabic ? 'جاهزة' : 'Ready'}</span>
+            </button>
+          ) : (
+            <button
+              id="btn-download-offline"
+              onClick={handleDownload}
+              title={isArabic ? 'تحميل السورة للاستماع دون اتصال بالإنترنت' : 'Download Surah for offline play'}
+              className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-emerald-950 hover:bg-emerald-900/70 border border-gold-400/35 hover:border-gold-300 text-gold-300 hover:text-gold-200 rounded-lg transition cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 shrink-0" />
+              <span className="text-[10px] font-bold">{isArabic ? 'تحميل' : 'Download'}</span>
+            </button>
+          )}
+
           {/* Reciter selector on player */}
           <select
             id="player-reciter-selector"

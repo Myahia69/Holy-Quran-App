@@ -51,6 +51,7 @@ export interface AudioFile {
   url: string;
   duration?: number;
   verse_timings?: VerseTiming[];
+  isOffline?: boolean;
 }
 
 export interface Tafsir {

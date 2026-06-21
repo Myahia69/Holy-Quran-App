@@ -152,9 +152,196 @@ export async function fetchTafsir(tafsirId: number, verseKey: string): Promise<T
 }
 
 /**
+ * Retrieves the offline cached AudioFile if it exists in caches and localStorage
+ */
+export async function getOfflineAudioFile(reciterId: number, chapterNumber: number): Promise<AudioFile | null> {
+  try {
+    const key = `quran_offline_meta_${reciterId}_${chapterNumber}`;
+    const cachedMeta = localStorage.getItem(key);
+    if (!cachedMeta) return null;
+    
+    const meta = JSON.parse(cachedMeta) as AudioFile;
+    if (!meta || !meta.url) return null;
+
+    if (typeof window !== 'undefined' && 'caches' in window) {
+      const cache = await window.caches.open('quran-offline-audio-cache');
+      const matched = await cache.match(meta.url);
+      if (matched) {
+        const blob = await matched.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        return {
+          ...meta,
+          url: objectUrl,
+          isOffline: true,
+        };
+      }
+    }
+  } catch (err) {
+    console.error('Error retrieving offline audio file:', err);
+  }
+  return null;
+}
+
+/**
+ * Checks if a specific recitation is downloaded offline
+ */
+export async function isAudioFileDownloaded(reciterId: number, chapterNumber: number): Promise<boolean> {
+  try {
+    const key = `quran_offline_meta_${reciterId}_${chapterNumber}`;
+    const cachedMeta = localStorage.getItem(key);
+    if (!cachedMeta) return false;
+
+    const meta = JSON.parse(cachedMeta) as AudioFile;
+    if (!meta || !meta.url) return false;
+
+    if (typeof window !== 'undefined' && 'caches' in window) {
+      const cache = await window.caches.open('quran-offline-audio-cache');
+      const matched = await cache.match(meta.url);
+      return !!matched;
+    }
+  } catch (err) {
+    console.error('Error checking outline download:', err);
+  }
+  return false;
+}
+
+/**
+ * Downloads a recitation audio file to Cache API and saves the timing details in localStorage
+ */
+export async function downloadAudioFile(
+  reciterId: number,
+  chapterNumber: number,
+  onProgress?: (progress: number) => void
+): Promise<void> {
+  let fileData: AudioFile | null = null;
+  const endpoints = [
+    `${BASE_URL}/chapter_recitations/${reciterId}/${chapterNumber}`,
+    `${BASE_URL}/recitations/${reciterId}/by_chapter/${chapterNumber}`
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.audio_file) {
+          const rawUrl = data.audio_file.audio_url || data.audio_file.url;
+          let cleanUrl = rawUrl;
+          if (cleanUrl && cleanUrl.startsWith('//')) {
+            cleanUrl = 'https:' + cleanUrl;
+          }
+          fileData = {
+            url: cleanUrl,
+            duration: data.audio_file.duration,
+            verse_timings: data.audio_file.verse_timings || [],
+          };
+          break;
+        }
+      }
+    } catch {
+      // ignore, try next
+    }
+  }
+
+  // Fallback if metadata endpoints failed
+  if (!fileData) {
+    const surahPadded = String(chapterNumber).padStart(3, '0');
+    let fallbackWebUrl = '';
+    if (reciterId === 7) {
+      fallbackWebUrl = `https://download.quranicaudio.com/quran/mishary_rashid_alafasy/${surahPadded}.mp3`;
+    } else if (reciterId === 3) {
+      fallbackWebUrl = `https://download.quranicaudio.com/quran/sudais/${surahPadded}.mp3`;
+    } else if (reciterId === 4) {
+      fallbackWebUrl = `https://download.quranicaudio.com/quran/sa3d_al9amdi/compleet/${surahPadded}.mp3`;
+    } else if (reciterId === 12) {
+      fallbackWebUrl = `https://download.quranicaudio.com/quran/khalil_al-husaree/murattal/${surahPadded}.mp3`;
+    } else {
+      fallbackWebUrl = `https://download.quranicaudio.com/quran/mishary_rashid_alafasy/${surahPadded}.mp3`;
+    }
+    fileData = {
+      url: fallbackWebUrl,
+      duration: 0,
+      verse_timings: [],
+    };
+  }
+
+  const mp3Url = fileData.url;
+  if (!mp3Url) {
+    throw new Error('No audio URL found for this chapter.');
+  }
+
+  // Fetch the audio blob with progress tracking
+  const response = await fetch(mp3Url);
+  if (!response.ok) {
+    throw new Error(`Failed to download audio file: ${response.statusText}`);
+  }
+
+  const contentLength = response.headers.get('content-length');
+  const total = contentLength ? parseInt(contentLength, 10) : 0;
+  
+  if (response.body && total > 0 && typeof ReadableStream !== 'undefined') {
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let loaded = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        loaded += value.length;
+        if (onProgress) {
+          onProgress(Math.round((loaded / total) * 100));
+        }
+      }
+    }
+
+    const blob = new Blob(chunks, { type: 'audio/mpeg' });
+    const cache = await window.caches.open('quran-offline-audio-cache');
+    await cache.put(mp3Url, new Response(blob));
+  } else {
+    if (onProgress) onProgress(50);
+    const blob = await response.blob();
+    const cache = await window.caches.open('quran-offline-audio-cache');
+    await cache.put(mp3Url, new Response(blob));
+    if (onProgress) onProgress(100);
+  }
+
+  // Save metadata to localStorage
+  localStorage.setItem(`quran_offline_meta_${reciterId}_${chapterNumber}`, JSON.stringify(fileData));
+}
+
+/**
+ * Deletes an offline cached recitation audio and metadata
+ */
+export async function deleteOfflineAudioFile(reciterId: number, chapterNumber: number): Promise<void> {
+  try {
+    const key = `quran_offline_meta_${reciterId}_${chapterNumber}`;
+    const cachedMeta = localStorage.getItem(key);
+    if (cachedMeta) {
+      const meta = JSON.parse(cachedMeta) as AudioFile;
+      if (meta && meta.url && typeof window !== 'undefined' && 'caches' in window) {
+        const cache = await window.caches.open('quran-offline-audio-cache');
+        await cache.delete(meta.url);
+      }
+    }
+    localStorage.removeItem(key);
+  } catch (err) {
+    console.error('Error deleting offline audio file:', err);
+  }
+}
+
+/**
  * Fetches the recitation audio file details and verse-level timestamps for a specific surah
  */
 export async function fetchAudioFile(reciterId: number, chapterNumber: number): Promise<AudioFile | null> {
+  // Check offline cache FIRST
+  const offlineCached = await getOfflineAudioFile(reciterId, chapterNumber);
+  if (offlineCached) {
+    console.log(`Using offline cached recitation for reciter ${reciterId}, surah ${chapterNumber}`);
+    return offlineCached;
+  }
+
   // Let's try BOTH endpoints for Quran.com API v4 (since structures differ across API versions)
   const endpoints = [
     `${BASE_URL}/chapter_recitations/${reciterId}/${chapterNumber}`,
