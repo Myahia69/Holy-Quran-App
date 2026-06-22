@@ -12,12 +12,21 @@ const BASE_URL = 'https://api.quran.com/api/v4';
  * Curated list of high-quality reciters with reliable verse timings
  */
 export const POPULAR_RECITERS = [
-  { id: 7, reciter_name: 'Mishary Rashid Alafasy', translated_name: 'مشاري راشد العفاسي', style: 'Murattal' },
-  { id: 3, reciter_name: 'Abdul Rahman Al-Sudais', translated_name: 'عبد الرحمن السديس', style: 'An-Nazaer' },
-  { id: 4, reciter_name: 'Saad Al-Ghamdi', translated_name: 'سعد الغامدي', style: 'Murattal' },
-  { id: 12, reciter_name: 'Mahmoud Khalil Al-Husary', translated_name: 'محمود خليل الحصري', style: 'Murattal' },
-  { id: 10, reciter_name: 'Saud Al-Shuraim', translated_name: 'سعود الشريم', style: 'Murattal' },
-  { id: 2, reciter_name: 'Abdul Basit Abdus Samad', translated_name: 'عبد الباسط عبد الصمد', style: 'Mojawwad' },
+  // Famous Egyptian Reciters / القراء المصريين المشهورين
+  { id: 6, reciter_name: 'Mahmoud Khalil Al-Husary', translated_name: 'محمود خليل الحصري (مرتل)', style: 'Murattal', isEgyptian: true, region: 'Egypt' },
+  { id: 12, reciter_name: 'Mahmoud Khalil Al-Husary (Muallim)', translated_name: 'محمود خليل الحصري (معلم)', style: 'Muallim', isEgyptian: true, region: 'Egypt' },
+  { id: 2, reciter_name: 'Abdul Basit Abdus Samad (Murattal)', translated_name: 'عبد الباسط عبد الصمد (مرتل)', style: 'Murattal', isEgyptian: true, region: 'Egypt' },
+  { id: 1, reciter_name: 'Abdul Basit Abdus Samad (Mujawwad)', translated_name: 'عبد الباسط عبد الصمد (مجود)', style: 'Mujawwad', isEgyptian: true, region: 'Egypt' },
+  { id: 9, reciter_name: 'Mohamed Siddiq al-Minshawi (Murattal)', translated_name: 'محمد صديق المنشاوي (مرتل)', style: 'Murattal', isEgyptian: true, region: 'Egypt' },
+  { id: 8, reciter_name: 'Mohamed Siddiq al-Minshawi (Mujawwad)', translated_name: 'محمد صديق المنشاوي (مجود)', style: 'Mujawwad', isEgyptian: true, region: 'Egypt' },
+  { id: 11, reciter_name: 'Mohamed al-Tablawi', translated_name: 'محمد الطبلاوي', style: 'Murattal', isEgyptian: true, region: 'Egypt' },
+  
+  // Other Popular Reciters
+  { id: 7, reciter_name: 'Mishari Rashid al-`Afasy', translated_name: 'مشاري راشد العفاسي', style: 'Murattal', region: 'Kuwait' },
+  { id: 3, reciter_name: 'Abdur-Rahman as-Sudais', translated_name: 'عبد الرحمن السديس', style: 'Murattal', region: 'KSA' },
+  { id: 10, reciter_name: 'Sa`ud ash-Shuraym', translated_name: 'سعود الشريم', style: 'Murattal', region: 'KSA' },
+  { id: 4, reciter_name: 'Abu Bakr al-Shatri', translated_name: 'أبو بكر الشاطري', style: 'Murattal', region: 'KSA' },
+  { id: 5, reciter_name: 'Hani ar-Rifai', translated_name: 'هاني الرفاعي', style: 'Murattal', region: 'KSA' },
 ];
 
 /**
@@ -34,9 +43,12 @@ export const POPULAR_TRANSLATIONS = [
  * Curated list of Tafsirs
  */
 export const POPULAR_TAFSIRS = [
-  { id: 169, name: 'Tafsir Al-Saadi (يسير في تفسير كلام المنان)', language: 'ar' },
-  { id: 165, name: 'Tafsir Al-Maysar (التفسير الميسر)', language: 'ar' },
-  { id: 14, name: 'Tafsir Ibn Kathir (ابن كثير - English Translation)', language: 'en' },
+  { id: 16, name: 'التفسير الميسر', language: 'ar' },
+  { id: 91, name: 'تفسير السعدي (تيسير الكريم الرحمن في تفسير كلام المنان)', language: 'ar' },
+  { id: 14, name: 'تفسير ابن كثير', language: 'ar' },
+  { id: 15, name: 'تفسير الطبري', language: 'ar' },
+  { id: 90, name: 'تفسير القرطبي', language: 'ar' },
+  { id: 94, name: 'تفسير البغوي', language: 'ar' },
 ];
 
 export async function fetchChapters(languageEn: boolean = true): Promise<Chapter[]> {
@@ -65,15 +77,53 @@ export async function fetchChapterVerses(
 ): Promise<{ verses: Verse[]; totalPages: number; currentPage: number }> {
   try {
     const response = await fetch(
-      `${BASE_URL}/verses/by_chapter/${chapterId}?language=en&translations=${translationId}&fields=text_uthmani&page=${page}&per_page=${perPage}`
+      `${BASE_URL}/verses/by_chapter/${chapterId}?language=en&translations=${translationId}&fields=text_uthmani&page=${page}&per_page=${perPage}&words=true`
     );
     if (!response.ok) {
       throw new Error(`Failed to fetch verses for chapter ${chapterId}`);
     }
     const data = await response.json();
     if (data.verses && data.verses.length > 0) {
+      const parsedVerses = data.verses.map((v: any) => {
+        const verseWords = v.words ? v.words.map((w: any) => {
+          let cleanAudioUrl = w.audio_url || '';
+          if (cleanAudioUrl) {
+            if (cleanAudioUrl.startsWith('//')) {
+              cleanAudioUrl = 'https:' + cleanAudioUrl;
+            } else if (!cleanAudioUrl.startsWith('http')) {
+              cleanAudioUrl = 'https://audio.qurancdn.com/' + cleanAudioUrl;
+            }
+          }
+          return {
+            id: w.id,
+            position: w.position,
+            text_uthmani: w.text_uthmani || w.text || '',
+            text: w.text || w.text_uthmani || '',
+            transliteration: w.transliteration ? {
+              text: w.transliteration.text || '',
+              language_name: w.transliteration.language_name || 'english'
+            } : undefined,
+            translation: w.translation ? {
+              text: w.translation.text || '',
+              language_name: w.translation.language_name || 'english'
+            } : undefined,
+            audio_url: cleanAudioUrl
+          };
+        }) : [];
+
+        return {
+          id: v.id,
+          verse_number: v.verse_number,
+          verse_key: v.verse_key,
+          juz_number: v.juz_number,
+          text_uthmani: v.text_uthmani,
+          translations: v.translations,
+          words: verseWords
+        };
+      });
+
       return {
-        verses: data.verses,
+        verses: parsedVerses,
         totalPages: data.pagination?.total_pages || 1,
         currentPage: data.pagination?.current_page || 1,
       };
@@ -105,8 +155,14 @@ export async function fetchChapterVerses(
  * Fetches Tafsir text for a specific verse key (e.g. "1:1")
  */
 export async function fetchTafsir(tafsirId: number, verseKey: string): Promise<Tafsir | null> {
+  // Since some specific IDs like 16, 14, 91, 15 return empty arrays on the direct endpoint "/quran/tafsirs/{id}", 
+  // but public endpoints like 165 or 160 return the full list of all 44 tafsearch resources, 
+  // we query multiple fallbacks and search inside the list to guarantee we find the requested Tafsir.
   const endpoints = [
     `${BASE_URL}/quran/tafsirs/${tafsirId}?verse_key=${verseKey}`,
+    `${BASE_URL}/quran/tafsirs/165?verse_key=${verseKey}`,
+    `${BASE_URL}/quran/tafsirs/160?verse_key=${verseKey}`,
+    `${BASE_URL}/quran/tafsirs/93?verse_key=${verseKey}`,
     `${BASE_URL}/tafsirs/${tafsirId}?verse_key=${verseKey}`
   ];
 
@@ -119,6 +175,34 @@ export async function fetchTafsir(tafsirId: number, verseKey: string): Promise<T
       const data = await response.json();
       if (!data) continue;
       
+      // Support plural 'tafsirs' list (returned by endpoints like 165, 160, 93 containing all 44 entries)
+      if (data.tafsirs && data.tafsirs.length > 0) {
+        // Look for the element matching our specific requested tafsirId
+        const matchedItem = data.tafsirs.find((t: any) => t.resource_id === tafsirId);
+        if (matchedItem) {
+          return {
+            resource_id: matchedItem.resource_id ?? tafsirId,
+            text: matchedItem.text ?? '',
+            resource_name: matchedItem.resource_name || POPULAR_TAFSIRS.find(t => t.id === tafsirId)?.name || 'Tafsir',
+            language: matchedItem.language_name || matchedItem.language || POPULAR_TAFSIRS.find(t => t.id === tafsirId)?.language || 'arabic',
+          };
+        }
+        
+        // If we didn't find an exact resource_id match but we requested the singular ID directly, 
+        // fall back to the first item (legacy/default comportamento)
+        if (url.includes(`/quran/tafsirs/${tafsirId}?`)) {
+          const item = data.tafsirs[0];
+          if (item) {
+            return {
+              resource_id: item.resource_id ?? tafsirId,
+              text: item.text ?? '',
+              resource_name: item.resource_name || POPULAR_TAFSIRS.find(t => t.id === tafsirId)?.name || 'Tafsir',
+              language: item.language_name || item.language || POPULAR_TAFSIRS.find(t => t.id === tafsirId)?.language || 'arabic',
+            };
+          }
+        }
+      }
+
       // Support singular 'tafsir' object (Quran.com API v4 format for single-verse)
       if (data.tafsir) {
         const item = data.tafsir;
@@ -128,19 +212,6 @@ export async function fetchTafsir(tafsirId: number, verseKey: string): Promise<T
           resource_name: item.resource_name || POPULAR_TAFSIRS.find(t => t.id === tafsirId)?.name || 'Tafsir',
           language: item.language_name || item.language || POPULAR_TAFSIRS.find(t => t.id === tafsirId)?.language || 'arabic',
         };
-      }
-
-      // Support plural 'tafsirs' list (older versions or alternative shapes)
-      if (data.tafsirs && data.tafsirs.length > 0) {
-        const item = data.tafsirs[0];
-        if (item) {
-          return {
-            resource_id: item.resource_id ?? tafsirId,
-            text: item.text ?? '',
-            resource_name: item.resource_name || POPULAR_TAFSIRS.find(t => t.id === tafsirId)?.name || 'Tafsir',
-            language: item.language_name || item.language || POPULAR_TAFSIRS.find(t => t.id === tafsirId)?.language || 'arabic',
-          };
-        }
       }
     } catch (error) {
       console.warn(`Attempt failed for Tafsir URL ${url}:`, error);
@@ -205,6 +276,38 @@ export async function isAudioFileDownloaded(reciterId: number, chapterNumber: nu
   return false;
 }
 
+function getFallbackUrl(reciterId: number, chapterNumber: number): string {
+  const surahPadded = String(chapterNumber).padStart(3, '0');
+  switch (reciterId) {
+    case 7: // Alafasy
+      return `https://download.quranicaudio.com/quran/mishary_rashid_alafasy/${surahPadded}.mp3`;
+    case 3: // Sudais
+      return `https://download.quranicaudio.com/quran/sudais/${surahPadded}.mp3`;
+    case 4: // Abu Bakr al-Shatri
+      return `https://download.quranicaudio.com/quran/abu_bakr_al_shatri/${surahPadded}.mp3`;
+    case 6: // Husary Murattal
+      return `https://download.quranicaudio.com/quran/khalil_al-husaree/murattal/${surahPadded}.mp3`;
+    case 12: // Husary Muallim
+      return `https://download.quranicaudio.com/quran/khalil_al-husaree/muallim/${surahPadded}.mp3`;
+    case 2: // Abdul Basit Murattal
+      return `https://download.quranicaudio.com/quran/abdul_basit_murattal/${surahPadded}.mp3`;
+    case 1: // Abdul Basit Mujawwad
+      return `https://download.quranicaudio.com/quran/abdul_basit_mujawwad/${surahPadded}.mp3`;
+    case 9: // Al-Minshawi Murattal
+      return `https://download.quranicaudio.com/quran/muhammad_siddeeq_al-minshaawee/murattal/${surahPadded}.mp3`;
+    case 8: // Al-Minshawi Mujawwad
+      return `https://download.quranicaudio.com/quran/muhammad_siddeeq_al-minshaawee/mujawwad/${surahPadded}.mp3`;
+    case 10: // Shuraym
+      return `https://download.quranicaudio.com/quran/shuraym/${surahPadded}.mp3`;
+    case 11: // Tablawi
+      return `https://download.quranicaudio.com/quran/mohammad_altablawi/${surahPadded}.mp3`;
+    case 5: // Hani ar-Rifai
+      return `https://download.quranicaudio.com/quran/hani_ar_rifai/${surahPadded}.mp3`;
+    default:
+      return `https://download.quranicaudio.com/quran/mishary_rashid_alafasy/${surahPadded}.mp3`;
+  }
+}
+
 /**
  * Downloads a recitation audio file to Cache API and saves the timing details in localStorage
  */
@@ -245,19 +348,7 @@ export async function downloadAudioFile(
 
   // Fallback if metadata endpoints failed
   if (!fileData) {
-    const surahPadded = String(chapterNumber).padStart(3, '0');
-    let fallbackWebUrl = '';
-    if (reciterId === 7) {
-      fallbackWebUrl = `https://download.quranicaudio.com/quran/mishary_rashid_alafasy/${surahPadded}.mp3`;
-    } else if (reciterId === 3) {
-      fallbackWebUrl = `https://download.quranicaudio.com/quran/sudais/${surahPadded}.mp3`;
-    } else if (reciterId === 4) {
-      fallbackWebUrl = `https://download.quranicaudio.com/quran/sa3d_al9amdi/compleet/${surahPadded}.mp3`;
-    } else if (reciterId === 12) {
-      fallbackWebUrl = `https://download.quranicaudio.com/quran/khalil_al-husaree/murattal/${surahPadded}.mp3`;
-    } else {
-      fallbackWebUrl = `https://download.quranicaudio.com/quran/mishary_rashid_alafasy/${surahPadded}.mp3`;
-    }
+    const fallbackWebUrl = getFallbackUrl(reciterId, chapterNumber);
     fileData = {
       url: fallbackWebUrl,
       duration: 0,
@@ -374,20 +465,7 @@ export async function fetchAudioFile(reciterId: number, chapterNumber: number): 
 
   // If both endpoints failed, let's return a curated online fallback URL to ensure it never crashes
   // Many popular recitations are hosted directly on download.quranicaudio.com
-  // Formats depend on the reciter, Mishary Alafasy is reciter 7 (Mishary_Rashid_Alafasy)
-  const surahPadded = String(chapterNumber).padStart(3, '0');
-  let fallbackWebUrl = '';
-  if (reciterId === 7) {
-    fallbackWebUrl = `https://download.quranicaudio.com/quran/mishary_rashid_alafasy/${surahPadded}.mp3`;
-  } else if (reciterId === 3) {
-    fallbackWebUrl = `https://download.quranicaudio.com/quran/sudais/${surahPadded}.mp3`;
-  } else if (reciterId === 4) {
-    fallbackWebUrl = `https://download.quranicaudio.com/quran/sa3d_al9amdi/compleet/${surahPadded}.mp3`;
-  } else if (reciterId === 12) {
-    fallbackWebUrl = `https://download.quranicaudio.com/quran/khalil_al-husaree/murattal/${surahPadded}.mp3`;
-  } else {
-    fallbackWebUrl = `https://download.quranicaudio.com/quran/mishary_rashid_alafasy/${surahPadded}.mp3`;
-  }
+  const fallbackWebUrl = getFallbackUrl(reciterId, chapterNumber);
 
   console.log(`Using static direct cdn fallback for audio track: ${fallbackWebUrl}`);
   return {

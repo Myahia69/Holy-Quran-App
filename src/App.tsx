@@ -79,7 +79,7 @@ export default function App() {
     return [];
   });
   const [activeSurah, setActiveSurah] = useState<number>(1);
-  const [activeLanguage, setActiveLanguage] = useState<'en' | 'ar'>('en');
+  const [activeLanguage, setActiveLanguage] = useState<'en' | 'ar'>('ar');
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [textScale, setTextScale] = useState<number>(1.0);
   const [reciterId, setReciterId] = useState<number>(7);
@@ -106,9 +106,10 @@ export default function App() {
   useEffect(() => {
     try {
       const cachedLang = localStorage.getItem('quran_active_language');
-      if (cachedLang === 'ar' || cachedLang === 'en') {
-        setActiveLanguage(cachedLang);
+      if (cachedLang !== 'ar') {
+        localStorage.setItem('quran_active_language', 'ar');
       }
+      setActiveLanguage('ar');
 
       const cachedSurah = localStorage.getItem('quran_last_surah');
       if (cachedSurah) {
@@ -510,7 +511,7 @@ export default function App() {
                           {ch.name_complex}
                         </p>
                         <p className={`text-[10px] ${isChActive ? 'text-gold-300/80' : 'text-stone-450 dark:text-gold-400/75 font-mono'}`}>
-                          {ch.translated_name.name}
+                          {isArabic ? `${ch.verses_count} آية` : `${ch.verses_count} verses`}
                         </p>
                       </div>
                     </div>
@@ -551,7 +552,7 @@ export default function App() {
                 </h2>
                 <p className="text-xs text-stone-200/90 mt-2 max-w-xl leading-relaxed italic font-serif">
                   {isArabic
-                    ? `سورة ${activeSurahDetail.name_complex}، نزلت في ${activeSurahDetail.revelation_place === 'makkah' ? 'مكة المكرمة' : 'المدينة المنورة'} وترتيبها في المصحف الشريف ${activeSurahDetail.revelation_order}`
+                    ? `سورة ${activeSurahDetail.name_arabic}، نزلت في ${activeSurahDetail.revelation_place === 'makkah' ? 'مكة المكرمة' : 'المدينة المنورة'} وترتيبها في المصحف الشريف ${activeSurahDetail.revelation_order}`
                     : `Surah ${activeSurahDetail.name_complex} is a ${activeSurahDetail.revelation_place} Revelation, chronicles as revelation order index #${activeSurahDetail.revelation_order} inside the Holy Quran.`}
                 </p>
               </div>
@@ -581,6 +582,7 @@ export default function App() {
               if (activeVerseKey === vKey && isPlaying) {
                 setIsPlaying(false);
               } else {
+                setActiveVerseKey(vKey);
                 setSeekToVerseKey(vKey);
                 setIsPlaying(true);
               }
@@ -612,6 +614,7 @@ export default function App() {
         onPlayPauseToggle={setIsPlaying}
         seekToVerseKey={seekToVerseKey}
         onClearSeekRequest={() => setSeekToVerseKey('')}
+        versesCount={activeSurahDetail?.verses_count || 0}
       />
 
       {/* 4. Overlay Modals & studying Drawers */}

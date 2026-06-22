@@ -26,6 +26,45 @@ import {
 import { fetchAudioFile, POPULAR_RECITERS, isAudioFileDownloaded, downloadAudioFile, deleteOfflineAudioFile } from '../services/quranApi';
 import { AudioFile, VerseTiming } from '../types';
 
+/**
+ * Validates the verse timings received from Quran.com's API.
+ * In a few instances (e.g. Surah Al-Baqarah for specific reciters), Quran.com API might deliver corrupt
+ * or extremely short/duplicated timelines because of server timeouts or scraping anomalies.
+ * If corrupt, we discard them so our high-quality duration-relative estimated timings will auto-generate.
+ */
+const validateAndSanitizeTimings = (timings: VerseTiming[] | undefined): VerseTiming[] => {
+  if (!timings || timings.length === 0) return [];
+  
+  let zeroDurationCount = 0;
+  let outOfOrderCount = 0;
+  let extremelyShortCount = 0; // verses shorter than 500ms
+  
+  for (let i = 0; i < timings.length; i++) {
+    const t = timings[i];
+    const dur = (t.timestamp_to || 0) - (t.timestamp_from || 0);
+    if (dur <= 0) {
+      zeroDurationCount++;
+    } else if (dur < 500) {
+      extremelyShortCount++;
+    }
+    if (i > 0 && t.timestamp_from < timings[i - 1].timestamp_from) {
+      outOfOrderCount++;
+    }
+  }
+  
+  // If more than 5% of verses have zero duration, or more than 2% out of chronological order, or 10% are extremely short, it is corrupt
+  if (
+    zeroDurationCount > timings.length * 0.05 || 
+    outOfOrderCount > timings.length * 0.02 || 
+    extremelyShortCount > timings.length * 0.1
+  ) {
+    console.warn("Detected corrupted verse timings from Quran.com API. Falling back to high-quality estimated timings.");
+    return [];
+  }
+  
+  return timings;
+};
+
 interface AudioPlayerProps {
   activeSurah: number;
   activeSurahName: string;
@@ -45,6 +84,7 @@ interface AudioPlayerProps {
   // Allow verses to trigger audio seeks
   seekToVerseKey: string;
   onClearSeekRequest: () => void;
+  versesCount?: number;
 }
 
 export default function AudioPlayer({
@@ -62,6 +102,7 @@ export default function AudioPlayer({
   onPlayPauseToggle,
   seekToVerseKey,
   onClearSeekRequest,
+  versesCount = 0,
 }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioData, setAudioData] = useState<AudioFile | null>(null);
@@ -84,6 +125,91 @@ export default function AudioPlayer({
   // Track the absolute timing offsets
   const timingsRef = useRef<VerseTiming[]>([]);
   timingsRef.current = audioData?.verse_timings || [];
+
+  const activeVerseKeyRef = useRef(activeVerseKey);
+  useEffect(() => {
+    activeVerseKeyRef.current = activeVerseKey;
+  }, [activeVerseKey]);
+
+  // High-frequency synchronizer refs and useEffect hook
+  const isPlayingRef = useRef(isPlaying);
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  const verseRepeatLimitRef = useRef(verseRepeatLimit);
+  useEffect(() => {
+    verseRepeatLimitRef.current = verseRepeatLimit;
+  }, [verseRepeatLimit]);
+
+  const currentVerseRepeatCountRef = useRef(currentVerseRepeatCount);
+  useEffect(() => {
+    currentVerseRepeatCountRef.current = currentVerseRepeatCount;
+  }, [currentVerseRepeatCount]);
+
+  const lastFinishedVerseKeyRef = useRef(lastFinishedVerseKey);
+  useEffect(() => {
+    lastFinishedVerseKeyRef.current = lastFinishedVerseKey;
+  }, [lastFinishedVerseKey]);
+
+  useEffect(() => {
+    let timerId: any = null;
+
+    const tick = () => {
+      const audio = audioRef.current;
+      if (!audio || !audioData || audio.paused) return;
+
+      const currentSecs = audio.currentTime;
+      setCurrentTime(currentSecs);
+      const currentMs = currentSecs * 1000;
+
+      const timings = timingsRef.current;
+      if (timings && timings.length > 0) {
+        // Find matching verse timing
+        const activeMatch = timings.find(
+          (t) => currentMs >= t.timestamp_from && currentMs < t.timestamp_to
+        );
+
+        if (activeMatch) {
+          if (activeVerseKeyRef.current !== activeMatch.verse_key) {
+            onActiveVerseChange(activeMatch.verse_key);
+          }
+        }
+
+        // Memorization repeat check
+        const currentActiveTiming = timings.find((t) => t.verse_key === activeVerseKeyRef.current);
+        if (currentActiveTiming && verseRepeatLimitRef.current > 1) {
+          const verseEndThreshold = currentActiveTiming.timestamp_to - 150;
+          if (currentMs >= verseEndThreshold && lastFinishedVerseKeyRef.current !== activeVerseKeyRef.current) {
+            if (currentVerseRepeatCountRef.current < verseRepeatLimitRef.current - 1) {
+              audio.currentTime = currentActiveTiming.timestamp_from / 1000;
+              setCurrentTime(currentActiveTiming.timestamp_from / 1000);
+              setCurrentVerseRepeatCount((prev) => prev + 1);
+            } else {
+              setLastFinishedVerseKey(activeVerseKeyRef.current);
+              setCurrentVerseRepeatCount(0);
+            }
+          }
+        }
+
+        if (activeMatch && activeMatch.verse_key !== activeVerseKeyRef.current) {
+          setLastFinishedVerseKey('');
+          setCurrentVerseRepeatCount(0);
+        }
+      }
+    };
+
+    if (isPlaying && audioData) {
+      // 30ms high-precision sync timer loop
+      timerId = setInterval(tick, 30);
+    }
+
+    return () => {
+      if (timerId) {
+        clearInterval(timerId);
+      }
+    };
+  }, [isPlaying, audioData]);
 
   const isArabic = activeLanguage === 'ar';
 
@@ -119,6 +245,7 @@ export default function AudioPlayer({
       onActiveVerseChange('');
       const file = await fetchAudioFile(reciterId, activeSurah);
       if (file) {
+        file.verse_timings = validateAndSanitizeTimings(file.verse_timings);
         setAudioData(file);
       }
     } catch (err) {
@@ -138,6 +265,7 @@ export default function AudioPlayer({
       onActiveVerseChange('');
       const file = await fetchAudioFile(reciterId, activeSurah);
       if (file) {
+        file.verse_timings = validateAndSanitizeTimings(file.verse_timings);
         setAudioData(file);
       }
     } catch (err) {
@@ -156,6 +284,7 @@ export default function AudioPlayer({
         const file = await fetchAudioFile(reciterId, activeSurah);
         if (isMounted) {
           if (file && file.url) {
+            file.verse_timings = validateAndSanitizeTimings(file.verse_timings);
             setAudioData(file);
             setHasError(false);
             // If currently playing, HTML5 play will be triggered by deep effects
@@ -204,6 +333,37 @@ export default function AudioPlayer({
     }
   }, [playbackSpeed, audioData]);
 
+  // Generate estimated verse timings if none are provided (fallback)
+  useEffect(() => {
+    if (
+      audioData &&
+      (!audioData.verse_timings || audioData.verse_timings.length === 0) &&
+      totalDuration > 0 &&
+      versesCount > 0
+    ) {
+      const estimated: VerseTiming[] = [];
+      const verseDuration = (totalDuration * 1000) / versesCount;
+      for (let i = 1; i <= versesCount; i++) {
+        const from = (i - 1) * verseDuration;
+        const to = i * verseDuration;
+        estimated.push({
+          verse_key: `${activeSurah}:${i}`,
+          timestamp_from: from,
+          timestamp_to: to,
+          duration: verseDuration,
+        });
+      }
+      setAudioData((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          verse_timings: estimated,
+        };
+      });
+      console.log(`Generated fallback estimated verse timings for Surah ${activeSurah}, count: ${versesCount}`);
+    }
+  }, [audioData?.url, totalDuration, versesCount, activeSurah]);
+
   // Track foreign volume levels
   useEffect(() => {
     if (audioRef.current) {
@@ -214,20 +374,51 @@ export default function AudioPlayer({
 
   // Respond to Seek Requests from Verse Grid list click
   useEffect(() => {
-    if (seekToVerseKey && audioData && audioData.verse_timings && audioRef.current) {
-      const match = audioData.verse_timings.find((t) => t.verse_key === seekToVerseKey);
-      if (match) {
-        // seek to timestamp_from
-        audioRef.current.currentTime = match.timestamp_from / 1000;
-        setCurrentTime(match.timestamp_from / 1000);
-        onActiveVerseChange(seekToVerseKey);
-        // Auto start playing
-        onPlayPauseToggle(true);
-        audioRef.current.play().catch(() => {});
+    if (seekToVerseKey && audioData && audioRef.current) {
+      const timings = audioData.verse_timings || [];
+      if (timings.length > 0) {
+        const match = timings.find((t) => t.verse_key === seekToVerseKey);
+        if (match) {
+          // seek to timestamp_from
+          audioRef.current.currentTime = match.timestamp_from / 1000;
+          setCurrentTime(match.timestamp_from / 1000);
+          onActiveVerseChange(seekToVerseKey);
+          // Auto start playing
+          onPlayPauseToggle(true);
+          audioRef.current.play().catch((e) => {
+            console.warn('Playback error on seek:', e);
+          });
+        }
+        onClearSeekRequest();
       }
-      onClearSeekRequest();
     }
   }, [seekToVerseKey, audioData]);
+
+  // Generate high-resolution estimated fallback timings if real timings are absent or cleared
+  useEffect(() => {
+    if (audioData && (!audioData.verse_timings || audioData.verse_timings.length === 0) && totalDuration > 0 && versesCount > 0) {
+      console.log(`Generating estimated verse timings for Surah ${activeSurah} (${versesCount} verses, duration ${totalDuration}s)`);
+      const approxDurationMs = (totalDuration * 1000) / versesCount;
+      const estimatedTimings: VerseTiming[] = [];
+      for (let i = 1; i <= versesCount; i++) {
+        const from = (i - 1) * approxDurationMs;
+        const to = i * approxDurationMs;
+        estimatedTimings.push({
+          verse_key: `${activeSurah}:${i}`,
+          timestamp_from: Math.round(from),
+          timestamp_to: Math.round(to),
+          duration: Math.round(approxDurationMs)
+        });
+      }
+      setAudioData(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          verse_timings: estimatedTimings
+        };
+      });
+    }
+  }, [totalDuration, versesCount, activeSurah, audioData?.url]);
 
   // Dynamic Verse Syncer & Repetition Memorization Engine
   const handleTimeUpdate = () => {
@@ -247,18 +438,18 @@ export default function AudioPlayer({
       );
 
       if (activeMatch) {
-         if (activeVerseKey !== activeMatch.verse_key) {
+         if (activeVerseKeyRef.current !== activeMatch.verse_key) {
            onActiveVerseChange(activeMatch.verse_key);
          }
       }
 
       // 2. Memorization Loop logic: Verse Repetition Check
       // We look at the verse timing of the currently highlighted verse
-      const currentActiveTiming = timings.find((t) => t.verse_key === activeVerseKey);
+      const currentActiveTiming = timings.find((t) => t.verse_key === activeVerseKeyRef.current);
       if (currentActiveTiming && verseRepeatLimit > 1) {
         // If we are nearing the end of this verse (within 150ms buffer)
         const verseEndThreshold = currentActiveTiming.timestamp_to - 150;
-        if (currentMs >= verseEndThreshold && lastFinishedVerseKey !== activeVerseKey) {
+        if (currentMs >= verseEndThreshold && lastFinishedVerseKey !== activeVerseKeyRef.current) {
           
           if (currentVerseRepeatCount < verseRepeatLimit - 1) {
             // Repeat this verse! Rewind seek back to timestamp_from of this verse
@@ -267,17 +458,17 @@ export default function AudioPlayer({
             setCurrentVerseRepeatCount((prev) => prev + 1);
             
             // Brief visual or console indicator
-            console.log(`Repeating Verse ${activeVerseKey} (${currentVerseRepeatCount + 1}/${verseRepeatLimit})`);
+            console.log(`Repeating Verse ${activeVerseKeyRef.current} (${currentVerseRepeatCount + 1}/${verseRepeatLimit})`);
           } else {
             // Repetitions completed. Mark as finished so we don't repeat again, and let it proceed to next verse
-            setLastFinishedVerseKey(activeVerseKey);
+            setLastFinishedVerseKey(activeVerseKeyRef.current);
             setCurrentVerseRepeatCount(0);
           }
         }
       }
 
       // If we move to a different verse, reset repetition counters for that new verse
-      if (activeMatch && activeMatch.verse_key !== activeVerseKey) {
+      if (activeMatch && activeMatch.verse_key !== activeVerseKeyRef.current) {
         setLastFinishedVerseKey('');
         setCurrentVerseRepeatCount(0);
       }
@@ -655,13 +846,22 @@ export default function AudioPlayer({
             id="player-reciter-selector"
             value={reciterId}
             onChange={(e) => onReciterChange(Number(e.target.value))}
-            className="bg-emerald-950 dark:bg-[#02130c] border border-gold-400/35 text-gold-200 text-xs rounded-lg p-1.5 focus:ring-0 outline-none max-w-[120px] md:max-w-[150px] truncate font-bold cursor-pointer"
+            className="bg-emerald-950 dark:bg-[#02130c] border border-gold-400/35 text-gold-200 text-xs rounded-lg p-1.5 focus:ring-0 outline-none max-w-[120px] md:max-w-[155px] truncate font-bold cursor-pointer"
           >
-            {POPULAR_RECITERS.map((r) => (
-              <option key={r.id} value={r.id} className="bg-[#072416] text-gold-200">
-                {isArabic ? r.translated_name : r.reciter_name}
-              </option>
-            ))}
+            <optgroup label={isArabic ? "عمالقة القراء المصريين" : "Egyptian Legendary Reciters"} className="bg-[#052115] text-gold-400 font-bold">
+              {POPULAR_RECITERS.filter((r) => r.isEgyptian).map((r) => (
+                <option key={r.id} value={r.id} className="bg-[#072416] text-gold-200 font-bold">
+                  {isArabic ? r.translated_name : r.reciter_name}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label={isArabic ? "قراء الحرمين والخليج" : "Haramain & Gulf Reciters"} className="bg-[#052115] text-stone-300 font-bold">
+              {POPULAR_RECITERS.filter((r) => !r.isEgyptian).map((r) => (
+                <option key={r.id} value={r.id} className="bg-[#072416] text-gold-200 font-bold">
+                  {isArabic ? r.translated_name : r.reciter_name}
+                </option>
+              ))}
+            </optgroup>
           </select>
 
           {/* Volume bars */}

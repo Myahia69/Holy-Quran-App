@@ -9,6 +9,22 @@ export interface Translation {
   text: string;
 }
 
+export interface Word {
+  id: number;
+  position: number;
+  text_uthmani?: string;
+  text?: string;
+  transliteration?: {
+    text: string;
+    language_name?: string;
+  };
+  translation?: {
+    text: string;
+    language_name?: string;
+  };
+  audio_url?: string;
+}
+
 export interface Verse {
   id: number;
   verse_number: number;
@@ -17,6 +33,7 @@ export interface Verse {
   text_uthmani?: string;
   text_imlaei?: string;
   translations?: Translation[];
+  words?: Word[];
 }
 
 export interface Chapter {
@@ -38,6 +55,8 @@ export interface Reciter {
   reciter_name: string;
   translated_name: string;
   style: string;
+  isEgyptian?: boolean;
+  region?: string;
 }
 
 export interface VerseTiming {

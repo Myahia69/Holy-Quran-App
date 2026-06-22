@@ -26,7 +26,22 @@ export default function TafsirDrawer({
   verseText,
   isArabic,
 }: TafsirDrawerProps) {
-  const [selectedTafsirId, setSelectedTafsirId] = useState<number>(14); // Default to Ibn Kathir (English) if language is English, or Al-Saadi (169)
+  const [selectedTafsirId, setSelectedTafsirId] = useState<number>(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('quran_selected_tafsir_id') : null;
+    const parsed = saved ? Number(saved) : 16;
+    // Map any legacy/corrupted IDs to the new officially supported Arabic IDs
+    const exists = [16, 91, 14, 15, 90, 94].includes(parsed);
+    if (!exists) {
+      if (parsed === 165) return 16; // Al-Muyassar
+      if (parsed === 169) return 91;  // Al-Sa'di
+      if (parsed === 160) return 14;  // Ibn Kathir
+      if (parsed === 161) return 15;  // Al-Tabari
+      if (parsed === 162) return 90;  // Al-Qurtubi
+      if (parsed === 825) return 94;  // Al-Baghawi
+      return 16; // Default fallback to Al-Muyassar
+    }
+    return parsed;
+  });
   const [tafsirData, setTafsirData] = useState<Tafsir | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [fontSize, setFontSize] = useState<number>(16); // in pixels
@@ -34,19 +49,12 @@ export default function TafsirDrawer({
   const isTafsirRtl =
     tafsirData?.language?.toLowerCase() === 'arabic' ||
     tafsirData?.language?.toLowerCase() === 'ar' ||
-    selectedTafsirId === 169 ||
-    selectedTafsirId === 165;
+    POPULAR_TAFSIRS.find(t => t.id === selectedTafsirId)?.language === 'ar';
 
-  // Adjust default Tafsir based on user app language
-  useEffect(() => {
-    if (isOpen) {
-      if (isArabic) {
-        setSelectedTafsirId(169); // Tafsir Al-Saadi
-      } else {
-        setSelectedTafsirId(14); // Tafsir Ibn Kathir English
-      }
-    }
-  }, [isOpen, isArabic]);
+  const handleTafsirChange = (id: number) => {
+    setSelectedTafsirId(id);
+    localStorage.setItem('quran_selected_tafsir_id', id.toString());
+  };
 
   // Fetch Tafsir on verse or Tafsir model change
   useEffect(() => {
@@ -141,7 +149,7 @@ export default function TafsirDrawer({
                 <select
                   id="tafsir-selector"
                   value={selectedTafsirId}
-                  onChange={(e) => setSelectedTafsirId(Number(e.target.value))}
+                  onChange={(e) => handleTafsirChange(Number(e.target.value))}
                   className="bg-[#fdfcf8] dark:bg-[#031d13] border-2 border-gold-400/20 dark:border-gold-500/15 text-stone-900 dark:text-gold-200 text-xs rounded-lg p-1 px-2 focus:border-gold-400 focus:ring-0 outline-none font-semibold cursor-pointer"
                 >
                   {POPULAR_TAFSIRS.map((t) => (

@@ -81,7 +81,7 @@ export default function Header({
           >
             {chaptersList.map((ch) => (
               <option key={ch.id} value={ch.id} className="dark:bg-[#021810] dark:text-gold-200 bg-white text-stone-900 text-xs">
-                {ch.id}. {isArabic ? ch.name_arabic : ch.name_complex} ({ch.translated_name.name})
+                {ch.id}. {isArabic ? ch.name_arabic : `${ch.name_arabic} (${ch.name_complex})`}
               </option>
             ))}
           </select>
@@ -141,16 +141,6 @@ export default function Header({
             <span className="text-xs font-black font-mono">A+</span>
           </button>
         </div>
-
-        {/* Dynamic Language toggle badge styled premium */}
-        <button
-          id="header-lang-switcher"
-          onClick={() => onLanguageChange(isArabic ? 'en' : 'ar')}
-          title={isArabic ? 'Switch to English' : 'التحويل للعربية'}
-          className="px-2.5 py-1.5 bg-emerald-900 dark:bg-gold-400/10 text-gold-300 dark:text-gold-300 rounded-lg text-xs font-bold cursor-pointer border-2 border-gold-400/35 transition hover:bg-emerald-950 dark:hover:bg-gold-400/20"
-        >
-          {isArabic ? 'EN' : 'عربي'}
-        </button>
 
         {/* Theme mode manual select */}
         <button
