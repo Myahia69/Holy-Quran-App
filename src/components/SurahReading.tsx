@@ -562,51 +562,6 @@ export default function SurahReading({
                   </div>
                 )}
 
-                {/* Word Meanings Section (معاني مفردات الآية الكريمة) */}
-                {verse.words && verse.words.length > 0 && (
-                  <div className="mt-4 border-t border-gold-400/10 pt-3 text-right" style={{ direction: 'rtl' }}>
-                    <div className="flex items-center gap-1.5 mb-2.5 text-[#10331e] dark:text-gold-200">
-                      <Sparkles className="w-3.5 h-3.5 text-gold-500 animate-pulse" />
-                      <span className="text-xs font-serif font-black">
-                        {isArabic ? 'معاني مفردات الآية' : 'Vocabulary & Word Meanings'}
-                      </span>
-                    </div>
-                    
-                    <div className="flex flex-row-reverse flex-wrap gap-2 justify-start leading-relaxed">
-                      {verse.words.map((word) => {
-                        // Skip silent words/punctuation that don't have text or meaning translation
-                        if (!word.text_uthmani || !word.translation?.text || word.translation.text === '' || word.text_uthmani.trim() === '') return null;
-                        
-                        const isWordActive = activeWordId === word.id || (isHighlighted && activeWordPosition === word.position);
-                        
-                        return (
-                          <div 
-                            key={word.id}
-                            onClick={() => {
-                              if (word.audio_url) {
-                                playWordAudio(word.audio_url, word.id);
-                              }
-                            }}
-                            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-[#FAF7F0] dark:bg-emerald-900/10 border transition text-right cursor-pointer select-none active:scale-95 ${
-                              isWordActive 
-                                ? 'bg-gold-400/20 border-gold-400 ring-1 ring-gold-400 scale-[1.03]' 
-                                : 'border-gold-400/10 hover:border-gold-400/30 hover:bg-[#FAF7F0]/80'
-                            }`}
-                            title={isArabic ? 'انقر للاستماع لنطق الكلمة' : 'Click to hear pronunciation'}
-                          >
-                            <span className="font-scheherazade text-emerald-950 dark:text-[#ccf2e2] font-black text-[16px] leading-none">
-                              {word.text_uthmani}
-                            </span>
-                            <span className="text-stone-300 dark:text-gold-500/30 text-[10px] leading-none select-none">•</span>
-                            <span className="text-[11px] text-stone-605 dark:text-stone-300 font-bold font-sans leading-none">
-                              {word.translation.text}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
 
                 {/* Inline Tafsir Block (تفسير الآية) */}
                 <div className="mt-4 border-t border-gold-400/10 pt-3 text-right" style={{ direction: 'rtl' }}>
