@@ -4,15 +4,16 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { BookOpen, Play, Pause, Bookmark, Copy, Check, ChevronLeft, ChevronRight, HelpCircle } from 'lucide-react';
+import { BookOpen, Play, Pause, Bookmark, Copy, Check, ChevronLeft, ChevronRight, HelpCircle, Sparkles } from 'lucide-react';
 import { Verse, Chapter } from '../types';
-import { fetchChapterVerses, POPULAR_TRANSLATIONS } from '../services/quranApi';
+import { fetchChapterVerses, fetchTafsir, POPULAR_TAFSIRS, POPULAR_TRANSLATIONS } from '../services/quranApi';
 
 interface SurahReadingProps {
   activeSurah: number;
   activeSurahDetail: Chapter | null;
   activeLanguage: 'en' | 'ar';
   activeVerseKey: string;
+  activeWordPosition?: number | null;
   onVersePlayClick: (verseKey: string) => void;
   onVerseStudyClick: (verseKey: string, text: string) => void;
   isAudioPlaying: boolean;
@@ -22,6 +23,7 @@ interface SurahReadingProps {
   // Bookmark state
   bookmarkedVerseKey: string;
   onToggleBookmark: (key: string) => void;
+  selectedTafsirId: number;
 }
 
 export default function SurahReading({
@@ -29,6 +31,7 @@ export default function SurahReading({
   activeSurahDetail,
   activeLanguage,
   activeVerseKey,
+  activeWordPosition,
   onVersePlayClick,
   onVerseStudyClick,
   isAudioPlaying,
@@ -37,12 +40,16 @@ export default function SurahReading({
   onTranslationChange,
   bookmarkedVerseKey,
   onToggleBookmark,
+  selectedTafsirId,
 }: SurahReadingProps) {
   const [verses, setVerses] = useState<Verse[]>([]);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [copiedVerseKey, setCopiedVerseKey] = useState<string>('');
+
+  const [tafsirs, setTafsirs] = useState<Record<string, string>>({});
+  const [isTafsirsLoading, setIsTafsirsLoading] = useState<boolean>(false);
 
   const [wbwEnabled, setWbwEnabled] = useState<boolean>(false);
   const [activeWordId, setActiveWordId] = useState<number | null>(null);
@@ -95,7 +102,50 @@ export default function SurahReading({
   useEffect(() => {
     setCurrentPage(1);
     setVerses([]);
+    setTafsirs({});
   }, [activeSurah]);
+
+  // Load Tafsir text for all verses on the current page
+  useEffect(() => {
+    if (verses.length === 0) return;
+
+    let isMounted = true;
+    const fetchTafsirsForPage = async () => {
+      setIsTafsirsLoading(true);
+      const loaded: Record<string, string> = { ...tafsirs };
+      try {
+        await Promise.all(
+          verses.map(async (v) => {
+            // Only fetch if not already loaded to avoid redundant calls, unless selectedTafsirId changed
+            // Actually, fetch representing the selectedTafsirId
+            try {
+              const res = await fetchTafsir(selectedTafsirId, v.verse_key);
+              if (res && isMounted) {
+                loaded[v.verse_key] = res.text;
+              }
+            } catch (err) {
+              console.warn(`Error loading tafsir for ${v.verse_key}:`, err);
+            }
+          })
+        );
+        if (isMounted) {
+          setTafsirs(loaded);
+        }
+      } catch (e) {
+        console.error('Failed loading page tafsirs:', e);
+      } finally {
+        if (isMounted) {
+          setIsTafsirsLoading(false);
+        }
+      }
+    };
+
+    fetchTafsirsForPage();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [verses, selectedTafsirId]);
 
   // Automatically navigate to the page containing the active verse during audio recitation
   useEffect(() => {
@@ -405,7 +455,7 @@ export default function SurahReading({
                     <div className="flex flex-row-reverse flex-wrap gap-x-3 gap-y-4 items-center justify-start leading-[2.6]">
                       {verse.words && verse.words.length > 0 ? (
                         verse.words.map((word) => {
-                          const isWordActive = activeWordId === word.id;
+                          const isWordActive = activeWordId === word.id || (isHighlighted && activeWordPosition === word.position);
                           return (
                             <div
                               key={word.id}
@@ -511,6 +561,94 @@ export default function SurahReading({
                     )}
                   </div>
                 )}
+
+                {/* Word Meanings Section (معاني مفردات الآية الكريمة) */}
+                {verse.words && verse.words.length > 0 && (
+                  <div className="mt-4 border-t border-gold-400/10 pt-3 text-right" style={{ direction: 'rtl' }}>
+                    <div className="flex items-center gap-1.5 mb-2.5 text-[#10331e] dark:text-gold-200">
+                      <Sparkles className="w-3.5 h-3.5 text-gold-500 animate-pulse" />
+                      <span className="text-xs font-serif font-black">
+                        {isArabic ? 'معاني مفردات الآية' : 'Vocabulary & Word Meanings'}
+                      </span>
+                    </div>
+                    
+                    <div className="flex flex-row-reverse flex-wrap gap-2 justify-start leading-relaxed">
+                      {verse.words.map((word) => {
+                        // Skip silent words/punctuation that don't have text or meaning translation
+                        if (!word.text_uthmani || !word.translation?.text || word.translation.text === '' || word.text_uthmani.trim() === '') return null;
+                        
+                        const isWordActive = activeWordId === word.id || (isHighlighted && activeWordPosition === word.position);
+                        
+                        return (
+                          <div 
+                            key={word.id}
+                            onClick={() => {
+                              if (word.audio_url) {
+                                playWordAudio(word.audio_url, word.id);
+                              }
+                            }}
+                            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-[#FAF7F0] dark:bg-emerald-900/10 border transition text-right cursor-pointer select-none active:scale-95 ${
+                              isWordActive 
+                                ? 'bg-gold-400/20 border-gold-400 ring-1 ring-gold-400 scale-[1.03]' 
+                                : 'border-gold-400/10 hover:border-gold-400/30 hover:bg-[#FAF7F0]/80'
+                            }`}
+                            title={isArabic ? 'انقر للاستماع لنطق الكلمة' : 'Click to hear pronunciation'}
+                          >
+                            <span className="font-scheherazade text-emerald-950 dark:text-[#ccf2e2] font-black text-[16px] leading-none">
+                              {word.text_uthmani}
+                            </span>
+                            <span className="text-stone-300 dark:text-gold-500/30 text-[10px] leading-none select-none">•</span>
+                            <span className="text-[11px] text-stone-605 dark:text-stone-300 font-bold font-sans leading-none">
+                              {word.translation.text}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Inline Tafsir Block (تفسير الآية) */}
+                <div className="mt-4 border-t border-gold-400/10 pt-3 text-right" style={{ direction: 'rtl' }}>
+                  <div className="flex items-center justify-between gap-2 mb-2.5">
+                    <div className="flex items-center gap-1.5 text-[#10331e] dark:text-gold-200">
+                      <BookOpen className="w-3.5 h-3.5 text-gold-500" />
+                      <span className="text-xs font-serif font-black">
+                        {isArabic 
+                          ? `تفسير الآية (${POPULAR_TAFSIRS.find(t => t.id === selectedTafsirId)?.name || 'الميسر'})` 
+                          : `Ayah Tafsir (${POPULAR_TAFSIRS.find(t => t.id === selectedTafsirId)?.name || 'Al-Muyassar'})`}
+                      </span>
+                    </div>
+                    {/* Change Tafsir triggers onVerseStudyClick to open selecting drawer */}
+                    <button
+                      onClick={() => onVerseStudyClick(verse.verse_key, verse.text_uthmani || '')}
+                      className="text-[11px] text-emerald-800 hover:text-emerald-700 dark:text-gold-400 dark:hover:text-gold-300 font-serif font-bold hover:underline transition flex items-center gap-1 cursor-pointer"
+                    >
+                      {isArabic ? 'تغيير كتاب التفسير ⚙️' : 'Choose Interpretation ⚙️'}
+                    </button>
+                  </div>
+
+                  {/* Tafsir text body */}
+                  {isTafsirsLoading && !tafsirs[verse.verse_key] ? (
+                    <div className="animate-pulse bg-stone-50 dark:bg-emerald-950/10 rounded-2xl p-4 border border-gold-400/10 h-16 flex items-center justify-center">
+                      <span className="text-xs text-stone-400 italic">
+                        {isArabic ? 'جاري تحميل التفسير المعتمد للآية...' : 'Loading chosen tafsir...'}
+                      </span>
+                    </div>
+                  ) : tafsirs[verse.verse_key] ? (
+                    <div className="bg-[#FAF7F0] dark:bg-[#031d10]/45 p-4 rounded-2xl border-r-4 border-gold-400/80 shadow-[inset_0_2px_8px_rgba(0,0,0,0.02)] border border-l-gold-400/5 duration-300">
+                      <p 
+                        className="font-sans leading-[1.8] text-stone-850 dark:text-[#ccf2e2]/95 text-right font-medium text-xs sm:text-sm"
+                        style={{ fontSize: `${13.5 * textScale}px` }}
+                        dangerouslySetInnerHTML={{ __html: tafsirs[verse.verse_key] }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="bg-[#FAF7F0] dark:bg-emerald-950/10 p-3.5 rounded-2xl border-2 border-dashed border-gold-400/10 text-center text-xs text-stone-400/80 italic">
+                      {isArabic ? 'التفسير غير متوفر في كتاب التفسير المحدد حالياً لهذه الآية.' : 'Interpretation data unavailable.'}
+                    </div>
+                  )}
+                </div>
               </div>
             );
             })}

@@ -64,6 +64,7 @@ export interface VerseTiming {
   timestamp_from: number; // in ms
   timestamp_to: number;   // in ms
   duration: number;       // in ms
+  segments?: [number, number, number][]; // [word_index, start_ms, end_ms]
 }
 
 export interface AudioFile {
@@ -71,6 +72,7 @@ export interface AudioFile {
   duration?: number;
   verse_timings?: VerseTiming[];
   isOffline?: boolean;
+  sizeInBytes?: number;
 }
 
 export interface Tafsir {

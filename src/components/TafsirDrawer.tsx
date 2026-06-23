@@ -16,6 +16,8 @@ interface TafsirDrawerProps {
   surahName: string;
   verseText?: string;
   isArabic: boolean;
+  selectedTafsirId: number;
+  onTafsirChange: (id: number) => void;
 }
 
 export default function TafsirDrawer({
@@ -25,23 +27,9 @@ export default function TafsirDrawer({
   surahName,
   verseText,
   isArabic,
+  selectedTafsirId,
+  onTafsirChange,
 }: TafsirDrawerProps) {
-  const [selectedTafsirId, setSelectedTafsirId] = useState<number>(() => {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('quran_selected_tafsir_id') : null;
-    const parsed = saved ? Number(saved) : 16;
-    // Map any legacy/corrupted IDs to the new officially supported Arabic IDs
-    const exists = [16, 91, 14, 15, 90, 94].includes(parsed);
-    if (!exists) {
-      if (parsed === 165) return 16; // Al-Muyassar
-      if (parsed === 169) return 91;  // Al-Sa'di
-      if (parsed === 160) return 14;  // Ibn Kathir
-      if (parsed === 161) return 15;  // Al-Tabari
-      if (parsed === 162) return 90;  // Al-Qurtubi
-      if (parsed === 825) return 94;  // Al-Baghawi
-      return 16; // Default fallback to Al-Muyassar
-    }
-    return parsed;
-  });
   const [tafsirData, setTafsirData] = useState<Tafsir | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [fontSize, setFontSize] = useState<number>(16); // in pixels
@@ -52,8 +40,7 @@ export default function TafsirDrawer({
     POPULAR_TAFSIRS.find(t => t.id === selectedTafsirId)?.language === 'ar';
 
   const handleTafsirChange = (id: number) => {
-    setSelectedTafsirId(id);
-    localStorage.setItem('quran_selected_tafsir_id', id.toString());
+    onTafsirChange(id);
   };
 
   // Fetch Tafsir on verse or Tafsir model change

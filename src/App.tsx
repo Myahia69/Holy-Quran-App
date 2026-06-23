@@ -88,8 +88,18 @@ export default function App() {
 
   // Audio Playback Synchronization states
   const [activeVerseKey, setActiveVerseKey] = useState<string>('');
+  const [activeWordPosition, setActiveWordPosition] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [seekToVerseKey, setSeekToVerseKey] = useState<string>('');
+
+  const [selectedTafsirId, setSelectedTafsirId] = useState<number>(() => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('quran_selected_tafsir_id') : null;
+      return saved ? Number(saved) : 16;
+    } catch {
+      return 16;
+    }
+  });
 
   // Drawers and Overlays
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
@@ -195,6 +205,12 @@ export default function App() {
       }
     } catch {}
   }, [bookmarkedVerseKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('quran_selected_tafsir_id', String(selectedTafsirId));
+    } catch {}
+  }, [selectedTafsirId]);
 
   // Update Recently Read list when activeSurah changes
   useEffect(() => {
@@ -577,12 +593,14 @@ export default function App() {
             activeSurahDetail={activeSurahDetail}
             activeLanguage={activeLanguage}
             activeVerseKey={activeVerseKey}
+            activeWordPosition={activeWordPosition}
             onVersePlayClick={(vKey) => {
               // Toggle play or seek
               if (activeVerseKey === vKey && isPlaying) {
                 setIsPlaying(false);
               } else {
                 setActiveVerseKey(vKey);
+                setActiveWordPosition(null);
                 setSeekToVerseKey(vKey);
                 setIsPlaying(true);
               }
@@ -594,6 +612,7 @@ export default function App() {
             onTranslationChange={setTranslationId}
             bookmarkedVerseKey={bookmarkedVerseKey}
             onToggleBookmark={handleToggleBookmark}
+            selectedTafsirId={selectedTafsirId}
           />
         </main>
       </div>
@@ -605,8 +624,10 @@ export default function App() {
         activeLanguage={activeLanguage}
         reciterId={reciterId}
         onReciterChange={setReciterId}
+        onSelectSurah={setActiveSurah}
         activeVerseKey={activeVerseKey}
         onActiveVerseChange={setActiveVerseKey}
+        onActiveWordPositionChange={setActiveWordPosition}
         onSurahComplete={handleSurahPlaybackComplete}
         onPrevSurah={handlePrevSurah}
         onNextSurah={handleNextSurah}
@@ -632,6 +653,8 @@ export default function App() {
         surahName={activeSurahName}
         verseText={tafsirVerseText}
         isArabic={isArabic}
+        selectedTafsirId={selectedTafsirId}
+        onTafsirChange={setSelectedTafsirId}
       />
     </div>
   );

@@ -159,10 +159,10 @@ export async function fetchTafsir(tafsirId: number, verseKey: string): Promise<T
   // but public endpoints like 165 or 160 return the full list of all 44 tafsearch resources, 
   // we query multiple fallbacks and search inside the list to guarantee we find the requested Tafsir.
   const endpoints = [
-    `${BASE_URL}/quran/tafsirs/${tafsirId}?verse_key=${verseKey}`,
     `${BASE_URL}/quran/tafsirs/165?verse_key=${verseKey}`,
     `${BASE_URL}/quran/tafsirs/160?verse_key=${verseKey}`,
     `${BASE_URL}/quran/tafsirs/93?verse_key=${verseKey}`,
+    `${BASE_URL}/quran/tafsirs/${tafsirId}?verse_key=${verseKey}`,
     `${BASE_URL}/tafsirs/${tafsirId}?verse_key=${verseKey}`
   ];
 
@@ -276,6 +276,81 @@ export async function isAudioFileDownloaded(reciterId: number, chapterNumber: nu
   return false;
 }
 
+export interface OfflineRecitationItem {
+  reciterId: number;
+  chapterNumber: number;
+  reciterName: string;
+  reciterTranslatedName: string;
+  surahNameComplex: string;
+  surahNameArabic: string;
+  sizeInBytes: number;
+}
+
+/**
+ * Lists all offline recitation chapters verified in Cache API and local storage
+ */
+export async function listOfflineRecitations(): Promise<OfflineRecitationItem[]> {
+  const items: OfflineRecitationItem[] = [];
+  try {
+    if (typeof window === 'undefined') return [];
+    
+    const cache = await window.caches.open('quran-offline-audio-cache');
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('quran_offline_meta_')) {
+        const parts = key.split('_');
+        const reciterId = parseInt(parts[3], 10);
+        const chapterNumber = parseInt(parts[4], 10);
+        
+        if (isNaN(reciterId) || isNaN(chapterNumber)) continue;
+        
+        const cachedMeta = localStorage.getItem(key);
+        if (!cachedMeta) continue;
+        
+        const meta = JSON.parse(cachedMeta) as AudioFile;
+        if (!meta || !meta.url) continue;
+        
+        // Verify response exists in Cache API
+        const cachedResponse = await cache.match(meta.url);
+        if (!cachedResponse) {
+          // Metadata exists but not cache file, remove stale metadata
+          localStorage.removeItem(key);
+          continue;
+        }
+
+        let sizeInBytes = meta.sizeInBytes || 0;
+        if (!sizeInBytes) {
+          try {
+            const blob = await cachedResponse.clone().blob();
+            sizeInBytes = blob.size;
+            meta.sizeInBytes = sizeInBytes;
+            localStorage.setItem(key, JSON.stringify(meta));
+          } catch {
+            sizeInBytes = 5 * 1024 * 1024; // fallback 5MB estimate
+          }
+        }
+        
+        const reciter = POPULAR_RECITERS.find(r => r.id === reciterId);
+        const chapter = FALLBACK_CHAPTERS.find(c => c.id === chapterNumber);
+        
+        items.push({
+          reciterId,
+          chapterNumber,
+          reciterName: reciter?.reciter_name || `Sheikh ID ${reciterId}`,
+          reciterTranslatedName: reciter?.translated_name || `الشيخ رقم ${reciterId}`,
+          surahNameComplex: chapter?.name_complex || `Surah ${chapterNumber}`,
+          surahNameArabic: chapter?.name_arabic || `سورة ${chapterNumber}`,
+          sizeInBytes,
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Error listing offline recitations:', err);
+  }
+  return items;
+}
+
 function getFallbackUrl(reciterId: number, chapterNumber: number): string {
   const surahPadded = String(chapterNumber).padStart(3, '0');
   switch (reciterId) {
@@ -318,8 +393,8 @@ export async function downloadAudioFile(
 ): Promise<void> {
   let fileData: AudioFile | null = null;
   const endpoints = [
-    `${BASE_URL}/chapter_recitations/${reciterId}/${chapterNumber}`,
-    `${BASE_URL}/recitations/${reciterId}/by_chapter/${chapterNumber}`
+    `${BASE_URL}/chapter_recitations/${reciterId}/${chapterNumber}?segments=true`,
+    `${BASE_URL}/recitations/${reciterId}/by_chapter/${chapterNumber}?segments=true`
   ];
 
   for (const url of endpoints) {
@@ -336,7 +411,7 @@ export async function downloadAudioFile(
           fileData = {
             url: cleanUrl,
             duration: data.audio_file.duration,
-            verse_timings: data.audio_file.verse_timings || [],
+            verse_timings: data.audio_file.timestamps || data.audio_file.verse_timings || [],
           };
           break;
         }
@@ -370,6 +445,8 @@ export async function downloadAudioFile(
   const contentLength = response.headers.get('content-length');
   const total = contentLength ? parseInt(contentLength, 10) : 0;
   
+  let downloadedSize = 0;
+
   if (response.body && total > 0 && typeof ReadableStream !== 'undefined') {
     const reader = response.body.getReader();
     const chunks: Uint8Array[] = [];
@@ -388,18 +465,24 @@ export async function downloadAudioFile(
     }
 
     const blob = new Blob(chunks, { type: 'audio/mpeg' });
+    downloadedSize = blob.size;
     const cache = await window.caches.open('quran-offline-audio-cache');
     await cache.put(mp3Url, new Response(blob));
   } else {
     if (onProgress) onProgress(50);
     const blob = await response.blob();
+    downloadedSize = blob.size;
     const cache = await window.caches.open('quran-offline-audio-cache');
     await cache.put(mp3Url, new Response(blob));
     if (onProgress) onProgress(100);
   }
 
-  // Save metadata to localStorage
-  localStorage.setItem(`quran_offline_meta_${reciterId}_${chapterNumber}`, JSON.stringify(fileData));
+  // Save metadata to localStorage including precalculated file size
+  const enrichedData: AudioFile = {
+    ...fileData,
+    sizeInBytes: downloadedSize,
+  };
+  localStorage.setItem(`quran_offline_meta_${reciterId}_${chapterNumber}`, JSON.stringify(enrichedData));
 }
 
 /**
@@ -435,8 +518,8 @@ export async function fetchAudioFile(reciterId: number, chapterNumber: number): 
 
   // Let's try BOTH endpoints for Quran.com API v4 (since structures differ across API versions)
   const endpoints = [
-    `${BASE_URL}/chapter_recitations/${reciterId}/${chapterNumber}`,
-    `${BASE_URL}/recitations/${reciterId}/by_chapter/${chapterNumber}`
+    `${BASE_URL}/chapter_recitations/${reciterId}/${chapterNumber}?segments=true`,
+    `${BASE_URL}/recitations/${reciterId}/by_chapter/${chapterNumber}?segments=true`
   ];
 
   for (const url of endpoints) {
@@ -454,7 +537,7 @@ export async function fetchAudioFile(reciterId: number, chapterNumber: number): 
           return {
             url: cleanUrl,
             duration: data.audio_file.duration,
-            verse_timings: data.audio_file.verse_timings || [],
+            verse_timings: data.audio_file.timestamps || data.audio_file.verse_timings || [],
           };
         }
       }

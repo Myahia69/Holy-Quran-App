@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Play,
   Pause,
@@ -22,8 +22,9 @@ import {
   Download,
   Check,
   Trash2,
+  HardDrive,
 } from 'lucide-react';
-import { fetchAudioFile, POPULAR_RECITERS, isAudioFileDownloaded, downloadAudioFile, deleteOfflineAudioFile } from '../services/quranApi';
+import { fetchAudioFile, POPULAR_RECITERS, isAudioFileDownloaded, downloadAudioFile, deleteOfflineAudioFile, listOfflineRecitations, OfflineRecitationItem } from '../services/quranApi';
 import { AudioFile, VerseTiming } from '../types';
 
 /**
@@ -71,9 +72,12 @@ interface AudioPlayerProps {
   activeLanguage: 'en' | 'ar';
   reciterId: number;
   onReciterChange: (id: number) => void;
+  onSelectSurah?: (id: number) => void;
   // This reports back to the parent which verse is currently active based on times
   activeVerseKey: string;
   onActiveVerseChange: (key: string) => void;
+  // Reports back the 1-based word position inside the currently active verse
+  onActiveWordPositionChange?: (position: number | null) => void;
   // Triggered when surah finishes completely to let parent auto-advance
   onSurahComplete: () => void;
   onPrevSurah: () => void;
@@ -93,8 +97,10 @@ export default function AudioPlayer({
   activeLanguage,
   reciterId,
   onReciterChange,
+  onSelectSurah,
   activeVerseKey,
   onActiveVerseChange,
+  onActiveWordPositionChange,
   onSurahComplete,
   onPrevSurah,
   onNextSurah,
@@ -130,6 +136,11 @@ export default function AudioPlayer({
   useEffect(() => {
     activeVerseKeyRef.current = activeVerseKey;
   }, [activeVerseKey]);
+
+  const onActiveWordPositionChangeRef = useRef(onActiveWordPositionChange);
+  useEffect(() => {
+    onActiveWordPositionChangeRef.current = onActiveWordPositionChange;
+  }, [onActiveWordPositionChange]);
 
   // High-frequency synchronizer refs and useEffect hook
   const isPlayingRef = useRef(isPlaying);
@@ -174,6 +185,22 @@ export default function AudioPlayer({
           if (activeVerseKeyRef.current !== activeMatch.verse_key) {
             onActiveVerseChange(activeMatch.verse_key);
           }
+
+          // Match active word position in segments if they exist
+          if (activeMatch.segments && activeMatch.segments.length > 0) {
+            const activeWordMatch = activeMatch.segments.find(
+              (seg) => currentMs >= seg[1] && currentMs < seg[2]
+            );
+            if (activeWordMatch) {
+              onActiveWordPositionChangeRef.current?.(activeWordMatch[0]);
+            } else {
+              onActiveWordPositionChangeRef.current?.(null);
+            }
+          } else {
+            onActiveWordPositionChangeRef.current?.(null);
+          }
+        } else {
+          onActiveWordPositionChangeRef.current?.(null);
         }
 
         // Memorization repeat check
@@ -196,6 +223,8 @@ export default function AudioPlayer({
           setLastFinishedVerseKey('');
           setCurrentVerseRepeatCount(0);
         }
+      } else {
+        onActiveWordPositionChangeRef.current?.(null);
       }
     };
 
@@ -217,6 +246,14 @@ export default function AudioPlayer({
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
 
+  const [downloadedSurahs, setDownloadedSurahs] = useState<OfflineRecitationItem[]>([]);
+  const [isManagerOpen, setIsManagerOpen] = useState<boolean>(false);
+
+  const loadDownloadedSurahs = async () => {
+    const list = await listOfflineRecitations();
+    setDownloadedSurahs(list);
+  };
+
   // Sync / check offline download status whenever surah or reciter changes
   useEffect(() => {
     let isMounted = true;
@@ -231,6 +268,11 @@ export default function AudioPlayer({
       isMounted = false;
     };
   }, [activeSurah, reciterId, isDownloading]);
+
+  // Sync downloaded items on mount and download completion
+  useEffect(() => {
+    loadDownloadedSurahs();
+  }, [isDownloading]);
 
   const handleDownload = async () => {
     if (isDownloading) return;
@@ -248,6 +290,7 @@ export default function AudioPlayer({
         file.verse_timings = validateAndSanitizeTimings(file.verse_timings);
         setAudioData(file);
       }
+      await loadDownloadedSurahs();
     } catch (err) {
       console.error('Download offline error:', err);
       alert(isArabic ? 'حدث خطأ أثناء تحميل السورة للاستماع دون اتصال بالإنترنت.' : 'Error downloading Surah for offline play.');
@@ -268,8 +311,41 @@ export default function AudioPlayer({
         file.verse_timings = validateAndSanitizeTimings(file.verse_timings);
         setAudioData(file);
       }
+      await loadDownloadedSurahs();
     } catch (err) {
       console.error('Delete offline error:', err);
+    }
+  };
+
+  const handlePlayOffline = async (item: OfflineRecitationItem) => {
+    try {
+      if (onSelectSurah) {
+        onSelectSurah(item.chapterNumber);
+      }
+      onReciterChange(item.reciterId);
+      onPlayPauseToggle(true);
+      setIsManagerOpen(false);
+    } catch (err) {
+      console.error('Play offline item failed:', err);
+    }
+  };
+
+  const handleDeleteOfflineItem = async (e: React.MouseEvent, item: OfflineRecitationItem) => {
+    e.stopPropagation();
+    try {
+      await deleteOfflineAudioFile(item.reciterId, item.chapterNumber);
+      await loadDownloadedSurahs();
+      if (item.chapterNumber === activeSurah && item.reciterId === reciterId) {
+        setIsDownloaded(false);
+        onActiveVerseChange('');
+        const file = await fetchAudioFile(reciterId, activeSurah);
+        if (file) {
+          file.verse_timings = validateAndSanitizeTimings(file.verse_timings);
+          setAudioData(file);
+        }
+      }
+    } catch (err) {
+      console.error('Delete offline item failed:', err);
     }
   };
 
@@ -583,6 +659,119 @@ export default function AudioPlayer({
       className="fixed bottom-0 left-0 right-0 bg-[#072416] dark:bg-[#01140c] text-stone-100 border-t-4 border-gold-400 shadow-[0_-15px_30px_rgba(0,0,0,0.35)] z-30 transition-all duration-300 px-4 md:px-8 py-3.5 md:py-4 flex flex-col md:gap-3"
       id="global-audio-sync-player"
     >
+      {/* Offline Downloads Manager Panel */}
+      {isManagerOpen && (
+        <div
+          className="absolute bottom-[108%] right-4 left-4 md:left-auto md:right-8 w-auto md:w-[380px] rounded-2xl bg-[#09291b] dark:bg-[#01140c] border border-gold-400 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] p-4 text-stone-100 z-40 flex flex-col max-h-[380px] overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-200"
+          id="downloads-manager-panel"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-gold-400/20 pb-2.5 mb-3">
+            <div className="flex items-center gap-2">
+              <HardDrive className="w-4 h-4 text-gold-400" />
+              <h3 className="font-serif font-black text-xs md:text-sm text-gold-200">
+                {isArabic ? 'المكتبة الصوتية دون اتصال' : 'Offline Audio Library'}
+              </h3>
+            </div>
+            <button
+              onClick={() => setIsManagerOpen(false)}
+              className="text-stone-400 hover:text-white transition p-1 hover:bg-white/5 rounded-lg"
+              title={isArabic ? 'إغلاق' : 'Close'}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Stats Bar */}
+          <div className="flex items-center justify-between text-[10px] text-stone-300 bg-white/5 px-2.5 py-1.5 rounded-lg border border-gold-400/10 mb-3 font-medium">
+            <span>
+              {isArabic 
+                ? `الملفات: ${downloadedSurahs.length}` 
+                : `Downloaded: ${downloadedSurahs.length} ${downloadedSurahs.length === 1 ? 'Surah' : 'Surahs'}`}
+            </span>
+            <span>
+              {isArabic 
+                ? `المساحة: ${(downloadedSurahs.reduce((acc, curr) => acc + curr.sizeInBytes, 0) / (1024 * 1024)).toFixed(1)} ميجابايت` 
+                : `Space Used: ${(downloadedSurahs.reduce((acc, curr) => acc + curr.sizeInBytes, 0) / (1024 * 1024)).toFixed(1)} MB`}
+            </span>
+          </div>
+
+          {/* List Scroll Area */}
+          <div className="flex-1 overflow-y-auto max-h-[220px] pr-1 space-y-2 select-none scrollbar-thin scrollbar-thumb-gold-400/20">
+            {downloadedSurahs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center py-8 px-4">
+                <HardDrive className="w-10 h-10 text-stone-500/50 mb-2.5" />
+                <p className="text-xs text-stone-300 leading-relaxed font-semibold">
+                  {isArabic 
+                    ? 'لم تقم بتنزيل أي سور بعد.' 
+                    : 'Your offline library is empty.'}
+                </p>
+                <p className="text-[10px] text-stone-400 leading-relaxed mt-1">
+                  {isArabic 
+                    ? 'اضغط على زر تنزيل (⬇️) بجوار أي تفسير لتخزينه.' 
+                    : 'Click the Download (⬇️) icon when playing an online Surah to save it for offline listening.'}
+                </p>
+              </div>
+            ) : (
+              downloadedSurahs.map((item) => {
+                const isItemPlayingNow = item.chapterNumber === activeSurah && item.reciterId === reciterId;
+                return (
+                  <div
+                    key={`${item.reciterId}_${item.chapterNumber}`}
+                    onClick={() => handlePlayOffline(item)}
+                    className={`group w-full text-right md:text-left p-2.5 rounded-xl border flex items-center justify-between gap-3 text-xs transition cursor-pointer ${
+                      isItemPlayingNow
+                        ? 'bg-gold-400/10 text-gold-300 border-gold-400/50'
+                        : 'bg-white/5 text-stone-200 border-transparent hover:border-gold-400/20 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 overflow-hidden">
+                      <div className={`p-1.5 rounded-md ${isItemPlayingNow ? 'bg-gold-400 text-emerald-950' : 'bg-stone-800 text-stone-300'}`}>
+                        {isItemPlayingNow && isPlaying ? (
+                          <div className="flex items-end gap-0.5 h-3.5 w-3.5 justify-center py-0.5">
+                            <span className="w-0.5 bg-current h-2 animate-pulse" />
+                            <span className="w-0.5 bg-current h-3 animate-pulse delay-75" />
+                            <span className="w-0.5 bg-current h-1 animate-pulse delay-150" />
+                          </div>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                            <polygon points="5 3 19 12 5 21 5 3" className="fill-current" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="text-left overflow-hidden">
+                        <p className="font-bold text-stone-100 truncate flex items-center gap-1.5">
+                          {isArabic ? item.surahNameArabic : item.surahNameComplex}
+                          <span className="text-[9px] text-gold-400 font-mono font-bold">#{item.chapterNumber}</span>
+                        </p>
+                        <p className="text-[10px] text-stone-400 truncate mt-0.5">
+                          {isArabic ? item.reciterTranslatedName : item.reciterName}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <span className="text-[10px] text-stone-400 font-mono text-right">
+                        {(item.sizeInBytes / (1024 * 1024)).toFixed(1)} MB
+                      </span>
+                      <button
+                        onClick={(e) => handleDeleteOfflineItem(e, item)}
+                        className="p-1.5 rounded-md hover:bg-rose-500/10 text-stone-400 hover:text-rose-400 transition"
+                        title={isArabic ? 'حذف من الجهاز' : 'Remove from device'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Invisible HTML5 Player core */}
       {audioData?.url && (
         <audio
@@ -840,6 +1029,28 @@ export default function AudioPlayer({
               <span className="text-[10px] font-bold">{isArabic ? 'تحميل' : 'Download'}</span>
             </button>
           )}
+
+          {/* Downloads Manager Toggle Button */}
+          <button
+            id="player-btn-downloads-manager"
+            onClick={() => {
+              setIsManagerOpen(!isManagerOpen);
+              loadDownloadedSurahs();
+            }}
+            title={isArabic ? 'المكتبة الصوتية للاستماع دون اتصال' : 'Manage Offline Downloads'}
+            className={`p-1.5 md:p-2 rounded-lg transition relative flex items-center justify-center cursor-pointer shrink-0 ${
+              isManagerOpen
+                ? 'bg-gold-400 text-emerald-950 border border-gold-400 shadow-sm'
+                : 'text-gold-300 hover:text-gold-200 hover:bg-gold-400/10 border border-transparent'
+            }`}
+          >
+            <HardDrive className="w-4 h-4" />
+            {downloadedSurahs.length > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-gold-405 text-emerald-950 font-bold text-[8px] rounded-full h-3.5 min-w-[14px] flex items-center justify-center font-mono border border-[#072416] px-0.5">
+                {downloadedSurahs.length}
+              </span>
+            )}
+          </button>
 
           {/* Reciter selector on player */}
           <select
