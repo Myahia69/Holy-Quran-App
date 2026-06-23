@@ -12,7 +12,9 @@ import SurahReading from './components/SurahReading';
 import TafsirDrawer from './components/TafsirDrawer';
 import SearchDialog from './components/SearchDialog';
 import SplashPage from './components/SplashPage';
-import { BookOpen, MapPin, Layers, Sparkles, HelpCircle, AlertCircle, RefreshCw, History } from 'lucide-react';
+import DuaSidebarSection from './components/DuaSidebarSection';
+import { motion, AnimatePresence } from 'motion/react';
+import { BookOpen, MapPin, Layers, Sparkles, HelpCircle, AlertCircle, RefreshCw, History, X } from 'lucide-react';
 
 export const JUZ_SURAH_MAP: Record<number, number[]> = {
   1: [1, 2],
@@ -73,7 +75,7 @@ export default function App() {
     }
   });
   const [chaptersList, setChaptersList] = useState<Chapter[]>([]);
-  const [sidebarTab, setSidebarTab] = useState<'all' | 'juz'>('all');
+  const [sidebarTab, setSidebarTab] = useState<'all' | 'juz' | 'dua'>('all');
   const [selectedJuz, setSelectedJuz] = useState<number>(1);
   const [recentlyRead, setRecentlyRead] = useState<number[]>(() => {
     try {
@@ -95,6 +97,15 @@ export default function App() {
   const [translationId, setTranslationId] = useState<number>(131);
   const [bookmarkedVerseKey, setBookmarkedVerseKey] = useState<string>('');
 
+  const [mushafMode, setMushafMode] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('quran_mushaf_view_mode');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
+
   // Audio Playback Synchronization states
   const [activeVerseKey, setActiveVerseKey] = useState<string>('');
   const [activeWordPosition, setActiveWordPosition] = useState<number | null>(null);
@@ -115,6 +126,7 @@ export default function App() {
   const [tafsirDrawerOpen, setTafsirDrawerOpen] = useState<boolean>(false);
   const [tafsirVerseKey, setTafsirVerseKey] = useState<string>('');
   const [tafsirVerseText, setTafsirVerseText] = useState<string>('');
+  const [isDuaDrawerOpen, setIsDuaDrawerOpen] = useState<boolean>(false);
 
   // App Initializers & Fallbacks
   const [isChapterLoading, setIsChapterLoading] = useState<boolean>(true);
@@ -221,6 +233,12 @@ export default function App() {
     } catch {}
   }, [selectedTafsirId]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('quran_mushaf_view_mode', String(mushafMode));
+    } catch {}
+  }, [mushafMode]);
+
   // Update Recently Read list when activeSurah changes
   useEffect(() => {
     if (activeSurah) {
@@ -319,6 +337,13 @@ export default function App() {
      }
   };
 
+  const handleNavigateToDuaVerse = (surahId: number, verseNumber: number) => {
+    setActiveSurah(surahId);
+    const verseKey = `${surahId}:${verseNumber}`;
+    setSeekToVerseKey(verseKey);
+    setActiveVerseKey(verseKey);
+  };
+
   // Handle auto-advance surah completely finished
   const handleSurahPlaybackComplete = () => {
      if (activeSurah < 114) {
@@ -377,6 +402,9 @@ export default function App() {
         onSurahSelect={setActiveSurah}
         bookmarkedVerseKey={bookmarkedVerseKey}
         onNavigateToBookmark={handleNavigateToBookmark}
+        onOpenDua={() => setIsDuaDrawerOpen(true)}
+        mushafMode={mushafMode}
+        onToggleMushaf={() => setMushafMode((m) => !m)}
       />
 
       {/* 2. Primary layout dashboard */}
@@ -446,30 +474,58 @@ export default function App() {
               </div>
             )}
 
-            <div className="flex bg-[#faf5eb]/70 dark:bg-emerald-950/40 p-1 rounded-2xl border-2 border-gold-400/15 mb-4" id="sidebar-tabs">
+            <div className="flex items-center gap-2 mb-4" id="sidebar-tabs-container">
+              <div className="flex-1 flex bg-[#faf5eb]/70 dark:bg-emerald-950/40 p-1 rounded-2xl border-2 border-gold-400/15" id="sidebar-tabs">
+                <button
+                  id="tab-all-surahs"
+                  className={`flex-1 py-1.5 px-2 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                    sidebarTab === 'all'
+                      ? 'bg-emerald-950 dark:bg-gold-500/15 text-gold-300 dark:text-gold-300 shadow-sm border border-gold-400/20'
+                      : 'text-[#143d26] dark:text-gold-300/70 hover:text-emerald-900 dark:hover:text-gold-200'
+                  }`}
+                  onClick={() => setSidebarTab('all')}
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>{isArabic ? 'السور' : 'Surahs'}</span>
+                </button>
+                <button
+                  id="tab-juz-surahs"
+                  className={`flex-1 py-1.5 px-2 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                    sidebarTab === 'juz'
+                      ? 'bg-emerald-950 dark:bg-gold-500/15 text-gold-300 dark:text-gold-300 shadow-sm border border-gold-400/20'
+                      : 'text-[#143d26] dark:text-gold-300/70 hover:text-emerald-900 dark:hover:text-gold-200'
+                  }`}
+                  onClick={() => setSidebarTab('juz')}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>{isArabic ? 'الأجزاء' : 'Juzs'}</span>
+                </button>
+                <button
+                  id="tab-dua-supplications"
+                  className={`flex-1 py-1.5 px-2 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                    sidebarTab === 'dua'
+                      ? 'bg-emerald-950 dark:bg-gold-500/15 text-gold-300 dark:text-gold-300 shadow-sm border border-gold-400/20'
+                      : 'text-[#143d25] dark:text-gold-300/70 hover:text-emerald-900 dark:hover:text-gold-200'
+                  }`}
+                  onClick={() => setSidebarTab('dua')}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>{isArabic ? 'الأدعية' : 'Duas'}</span>
+                </button>
+              </div>
+
+              {/* Dedicated Mushaf Mode Switch Button next to tabs */}
               <button
-                id="tab-all-surahs"
-                className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                  sidebarTab === 'all'
-                    ? 'bg-emerald-950 dark:bg-gold-500/15 text-gold-300 dark:text-gold-300 shadow-sm border border-gold-400/20'
-                    : 'text-[#143d26] dark:text-gold-300/70 hover:text-emerald-900 dark:hover:text-gold-200'
+                id="sidebar-mushaf-toggle"
+                onClick={() => setMushafMode((m) => !m)}
+                title={isArabic ? 'المصحف للقراءة' : 'Mushaf Reading Mode'}
+                className={`p-2 rounded-2xl border-2 transition cursor-pointer shrink-0 flex items-center justify-center ${
+                  mushafMode
+                    ? 'bg-gold-400 text-emerald-950 border-gold-450 shadow-md font-extrabold'
+                    : 'bg-[#faf5eb]/70 dark:bg-emerald-950/40 text-[#143d26] dark:text-gold-250 border-gold-400/15 hover:border-gold-400 hover:text-[#b4923e]'
                 }`}
-                onClick={() => setSidebarTab('all')}
               >
-                <BookOpen className="w-3.5 h-3.5" />
-                <span>{isArabic ? 'السور' : 'Surahs'}</span>
-              </button>
-              <button
-                id="tab-juz-surahs"
-                className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                  sidebarTab === 'juz'
-                    ? 'bg-emerald-950 dark:bg-gold-500/15 text-gold-300 dark:text-gold-300 shadow-sm border border-gold-400/20'
-                    : 'text-[#143d26] dark:text-gold-300/70 hover:text-emerald-900 dark:hover:text-gold-200'
-                }`}
-                onClick={() => setSidebarTab('juz')}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>{isArabic ? 'الأجزاء' : 'Juzs'}</span>
+                <BookOpen className="w-4 h-4" />
               </button>
             </div>
 
@@ -498,63 +554,75 @@ export default function App() {
               </div>
             )}
 
-            <div className="flex items-center gap-2 mb-5 px-2 pb-2 border-b border-gold-400/10">
-              <BookOpen className="w-4 h-4 text-emerald-800 dark:text-gold-400" />
-              <h3 className="font-cinzel font-bold text-xs uppercase tracking-wider text-[#143d26] dark:text-gold-300">
-                {sidebarTab === 'all'
-                  ? (isArabic ? 'فهرس السور الكريمة' : 'SURAH INDEX')
-                  : (isArabic ? `سور الجزء ${selectedJuz}` : `SURAS OF JUZ ${selectedJuz}`)}
-              </h3>
-            </div>
+            {sidebarTab !== 'dua' ? (
+              <>
+                <div className="flex items-center gap-2 mb-5 px-2 pb-2 border-b border-gold-400/10">
+                  <BookOpen className="w-4 h-4 text-emerald-800 dark:text-gold-400" />
+                  <h3 className="font-cinzel font-bold text-xs uppercase tracking-wider text-[#143d26] dark:text-gold-300">
+                    {sidebarTab === 'all'
+                      ? (isArabic ? 'فهرس السور الكريمة' : 'SURAH INDEX')
+                      : (isArabic ? `سور الجزء ${selectedJuz}` : `SURAS OF JUZ ${selectedJuz}`)}
+                  </h3>
+                </div>
 
-            <div className="flex flex-col gap-2" id="sidebar-chapters-ul">
-              {filteredChapters.map((ch) => {
-                const isChActive = ch.id === activeSurah;
-                return (
-                  <button
-                    id={`sidebar-btn-surah-${ch.id}`}
-                    key={ch.id}
-                    onClick={() => {
-                      setActiveSurah(ch.id);
-                      setIsPlaying(false);
-                      setActiveVerseKey('');
-                    }}
-                    className={`w-full text-right p-3 rounded-xl flex items-center justify-between gap-3 text-xs font-semibold transition cursor-pointer border-2 ${
-                      isChActive
-                        ? 'bg-emerald-950 text-gold-300 border-gold-400 shadow-md scale-[1.015]'
-                        : 'bg-white/50 dark:bg-emerald-900/10 text-[#0c2e1c] dark:text-gold-200 border-transparent hover:border-gold-400/20 dark:hover:border-gold-550/20 hover:bg-[#faf5eb] dark:hover:bg-emerald-900/30'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        className={`w-6 h-6 rounded-lg text-[10px] font-bold font-mono flex items-center justify-center border ${
+                <div className="flex flex-col gap-2" id="sidebar-chapters-ul">
+                  {filteredChapters.map((ch) => {
+                    const isChActive = ch.id === activeSurah;
+                    return (
+                      <button
+                        id={`sidebar-btn-surah-${ch.id}`}
+                        key={ch.id}
+                        onClick={() => {
+                          setActiveSurah(ch.id);
+                          setIsPlaying(false);
+                          setActiveVerseKey('');
+                        }}
+                        className={`w-full text-right p-3 rounded-xl flex items-center justify-between gap-3 text-xs font-semibold transition cursor-pointer border-2 ${
                           isChActive
-                            ? 'bg-gold-400 text-emerald-950 border-gold-400'
-                            : 'bg-stone-50 dark:bg-emerald-950/60 text-[#143d26] dark:text-gold-300 border-gold-400/10'
+                            ? 'bg-emerald-950 text-gold-300 border-gold-400 shadow-md scale-[1.015]'
+                            : 'bg-white/50 dark:bg-emerald-900/10 text-[#0c2e1c] dark:text-gold-200 border-transparent hover:border-gold-400/20 dark:hover:border-gold-550/20 hover:bg-[#faf5eb] dark:hover:bg-emerald-900/30'
                         }`}
                       >
-                        {ch.id}
-                      </span>
-                      <div className="text-left font-sans">
-                        <p className={isChActive ? 'text-gold-300 font-bold' : 'text-stone-900 dark:text-stone-105 font-bold'}>
-                          {ch.name_complex}
-                        </p>
-                        <p className={`text-[10px] ${isChActive ? 'text-gold-300/80' : 'text-stone-450 dark:text-gold-400/75 font-mono'}`}>
-                          {isArabic ? `${ch.verses_count} آية` : `${ch.verses_count} verses`}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <span
-                      className={`font-semibold text-sm pr-1 ${isChActive ? 'text-gold-300 font-bold lg:text-base' : 'text-emerald-800 dark:text-gold-300'}`}
-                      style={{ fontFamily: "'Scheherazade New', 'Amiri', serif" }}
-                    >
-                      {ch.name_arabic}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className={`w-6 h-6 rounded-lg text-[10px] font-bold font-mono flex items-center justify-center border ${
+                              isChActive
+                                ? 'bg-gold-400 text-emerald-950 border-gold-400'
+                                : 'bg-stone-50 dark:bg-emerald-950/60 text-[#143d26] dark:text-gold-300 border-gold-400/10'
+                            }`}
+                          >
+                            {ch.id}
+                          </span>
+                          <div className="text-left font-sans">
+                            <p className={isChActive ? 'text-gold-300 font-bold' : 'text-stone-900 dark:text-stone-105 font-bold'}>
+                              {ch.name_complex}
+                            </p>
+                            <p className={`text-[10px] ${isChActive ? 'text-gold-300/80' : 'text-stone-450 dark:text-gold-400/75 font-mono'}`}>
+                              {isArabic ? `${ch.verses_count} آية` : `${ch.verses_count} verses`}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <span
+                          className={`font-semibold text-sm pr-1 ${isChActive ? 'text-gold-300 font-bold lg:text-base' : 'text-emerald-800 dark:text-gold-300'}`}
+                          style={{ fontFamily: "'Scheherazade New', 'Amiri', serif" }}
+                        >
+                          {ch.name_arabic}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 overflow-hidden" id="sidebar-dua-section-panel">
+                <DuaSidebarSection
+                  isArabic={isArabic}
+                  onNavigateToVerse={handleNavigateToDuaVerse}
+                  activeSurah={activeSurah}
+                />
+              </div>
+            )}
           </aside>
         )}
 
@@ -626,6 +694,8 @@ export default function App() {
             bookmarkedVerseKey={bookmarkedVerseKey}
             onToggleBookmark={handleToggleBookmark}
             selectedTafsirId={selectedTafsirId}
+            mushafMode={mushafMode}
+            onToggleMushaf={() => setMushafMode((m) => !m)}
           />
         </main>
       </div>
@@ -669,6 +739,60 @@ export default function App() {
         selectedTafsirId={selectedTafsirId}
         onTafsirChange={setSelectedTafsirId}
       />
+
+      {/* 5. Mobile Supplication/Dua Drawer */}
+      <AnimatePresence>
+        {isDuaDrawerOpen && (
+          <div dir="rtl" className="fixed inset-0 z-40 flex justify-end" id="mobile-dua-drawer-overlay">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsDuaDrawerOpen(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            
+            {/* Drawer Body - Slides in from right/left based on standard visual layouts */}
+            <motion.div
+              initial={{ x: isArabic ? '100%' : '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: isArabic ? '100%' : '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+              className="relative w-80 max-w-full bg-[#faf7ef] dark:bg-[#02140c] h-full shadow-[0_0_40px_rgba(0,0,0,0.5)] border-l-2 border-gold-400/40 dark:border-gold-500/20 px-4 py-6 flex flex-col z-50 overflow-hidden"
+              style={{ direction: isArabic ? 'rtl' : 'ltr' }}
+            >
+              {/* Close Button Header */}
+              <div className="flex items-center justify-between mb-4 pb-2.5 border-b border-gold-400/10 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  <h3 className="font-serif font-black text-xs text-[#143d26] dark:text-gold-200 uppercase tracking-wide">
+                    {isArabic ? 'الأدعية القرآنية الكريمة' : 'Quranic Supplications'}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setIsDuaDrawerOpen(false)}
+                  className="p-1 rounded-lg hover:bg-stone-200 dark:hover:bg-emerald-950/50 text-stone-500 dark:text-gold-400 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Supplication Side Panel lists */}
+              <div className="flex-1 overflow-hidden">
+                <DuaSidebarSection
+                  isArabic={isArabic}
+                  onNavigateToVerse={(surahId, verseNum) => {
+                    handleNavigateToDuaVerse(surahId, verseNum);
+                    setIsDuaDrawerOpen(false);
+                  }}
+                  activeSurah={activeSurah}
+                />
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Sun, Moon, Search, Sliders, Type, BookOpen, Bookmark, Volume2 } from 'lucide-react';
+import { Sun, Moon, Search, Sliders, Type, BookOpen, Bookmark, Volume2, Sparkles } from 'lucide-react';
 import { Chapter } from '../types';
 
 interface HeaderProps {
@@ -21,6 +21,9 @@ interface HeaderProps {
   // Bookmarked verse indicator
   bookmarkedVerseKey: string;
   onNavigateToBookmark: () => void;
+  onOpenDua?: () => void;
+  mushafMode: boolean;
+  onToggleMushaf: () => void;
 }
 
 export default function Header({
@@ -36,6 +39,9 @@ export default function Header({
   onSurahSelect,
   bookmarkedVerseKey,
   onNavigateToBookmark,
+  onOpenDua,
+  mushafMode,
+  onToggleMushaf,
 }: HeaderProps) {
   const isArabic = activeLanguage === 'ar';
 
@@ -105,6 +111,36 @@ export default function Header({
             <span className="text-[10px] md:text-xs font-mono font-bold hidden sm:inline">{bookmarkedVerseKey}</span>
           </button>
         )}
+
+        {/* Supplications / Dua Section trigger */}
+        <button
+          id="header-dua-drawer-trigger"
+          onClick={onOpenDua}
+          title={isArabic ? 'الأدعية القرآنية الكريمة' : 'Quranic Duas'}
+          className="p-1.5 md:p-2 text-[#113f28] dark:text-gold-300 hover:text-gold-500 bg-amber-500/5 hover:bg-gold-400/10 dark:bg-emerald-950/40 dark:hover:bg-gold-500/10 border border-gold-400/25 rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0"
+        >
+          <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
+          <span className="text-[10px] md:text-xs font-bold leading-none hidden sm:inline">
+            {isArabic ? 'الأدعية' : 'Duas'}
+          </span>
+        </button>
+
+        {/* Mushaf للقراءة Button right next to the Duas button */}
+        <button
+          id="header-mushaf-mode-trigger"
+          onClick={onToggleMushaf}
+          title={isArabic ? 'المصحف للقراءة' : 'Mushaf Reading Mode'}
+          className={`p-1.5 md:p-2 border rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+            mushafMode
+              ? 'bg-gold-400 text-emerald-950 border-gold-450 font-extrabold shadow-sm'
+              : 'text-[#113f28] dark:text-gold-250 hover:text-[#b4923e] border-gold-400/25 dark:border-gold-500/10 hover:bg-gold-400/10'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          <span className="text-[10px] md:text-xs font-bold leading-none hidden sm:inline font-serif">
+            {isArabic ? 'المصحف للقراءة' : 'Mushaf Read'}
+          </span>
+        </button>
 
         {/* Global Search trigger styled as search input pill */}
         <button

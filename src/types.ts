@@ -30,6 +30,7 @@ export interface Verse {
   verse_number: number;
   verse_key: string;
   juz_number: number;
+  page_number?: number;
   text_uthmani?: string;
   text_imlaei?: string;
   translations?: Translation[];

@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { BookOpen, Play, Pause, Bookmark, Copy, Check, ChevronLeft, ChevronRight, HelpCircle, Sparkles } from 'lucide-react';
 import { Verse, Chapter } from '../types';
-import { fetchChapterVerses, fetchTafsir, POPULAR_TAFSIRS, POPULAR_TRANSLATIONS } from '../services/quranApi';
+import { fetchChapterVerses, fetchPageVerses, fetchTafsir, POPULAR_TAFSIRS, POPULAR_TRANSLATIONS } from '../services/quranApi';
 
 interface SurahReadingProps {
   activeSurah: number;
@@ -24,6 +24,8 @@ interface SurahReadingProps {
   bookmarkedVerseKey: string;
   onToggleBookmark: (key: string) => void;
   selectedTafsirId: number;
+  mushafMode: boolean;
+  onToggleMushaf: () => void;
 }
 
 const SURAH_START_PAGES = [
@@ -90,21 +92,14 @@ export default function SurahReading({
   bookmarkedVerseKey,
   onToggleBookmark,
   selectedTafsirId,
+  mushafMode,
+  onToggleMushaf,
 }: SurahReadingProps) {
   const [verses, setVerses] = useState<Verse[]>([]);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [copiedVerseKey, setCopiedVerseKey] = useState<string>('');
-
-  const [mushafMode, setMushafMode] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('quran_mushaf_view_mode');
-      return saved === 'true';
-    } catch {
-      return false;
-    }
-  });
 
   const [mushafPage, setMushafPage] = useState<number>(() => {
     const start = SURAH_START_PAGES[activeSurah] || 1;
@@ -122,10 +117,23 @@ export default function SurahReading({
 
   const [zoomLevel, setZoomLevel] = useState<number>(100);
 
+  const [extraSharp, setExtraSharp] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('quran_mushaf_sharp');
+      return saved !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
   const [tafsirs, setTafsirs] = useState<Record<string, string>>({});
   const [isTafsirsLoading, setIsTafsirsLoading] = useState<boolean>(false);
 
-  const [wbwEnabled, setWbwEnabled] = useState<boolean>(false);
+  // States for interactive Mushaf Page Side-by-side Panel
+  const [mushafPageVerses, setMushafPageVerses] = useState<Verse[]>([]);
+  const [isMushafPageLoading, setIsMushafPageLoading] = useState<boolean>(false);
+  const [imageErrorCount, setImageErrorCount] = useState<number>(0);
+
   const [activeWordId, setActiveWordId] = useState<number | null>(null);
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -192,11 +200,74 @@ export default function SurahReading({
     } catch {}
   }, [invertMushaf]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('quran_mushaf_sharp', String(extraSharp));
+    } catch {}
+  }, [extraSharp]);
+
   // Sync Mushaf Page when Surah changes from parent select
   useEffect(() => {
     const sPage = SURAH_START_PAGES[activeSurah] || 1;
     setMushafPage(sPage);
   }, [activeSurah]);
+
+  // Reset image error count when page changes to try high-res first
+  useEffect(() => {
+    setImageErrorCount(0);
+  }, [mushafPage]);
+
+  // Load verses of the current Mushaf Page for side-by-side translation/tafsir
+  useEffect(() => {
+    if (!mushafMode) return;
+    
+    let isMounted = true;
+    const loadVersesForMushafPage = async () => {
+      setIsMushafPageLoading(true);
+      try {
+        const pageVerses = await fetchPageVerses(mushafPage, translationId);
+        if (isMounted) {
+          setMushafPageVerses(pageVerses);
+        }
+      } catch (err) {
+        console.error('Error fetching verses for mushaf page:', err);
+      } finally {
+        if (isMounted) {
+          setIsMushafPageLoading(false);
+        }
+      }
+    };
+    
+    loadVersesForMushafPage();
+    return () => {
+      isMounted = false;
+    };
+  }, [mushafPage, translationId, mushafMode]);
+
+  // Sync Mushaf Page with Active Verse key during global recitation/audio playing
+  useEffect(() => {
+    if (mushafMode && activeVerseKey) {
+      const isAlreadyOnPage = mushafPageVerses.some(v => v.verse_key === activeVerseKey);
+      if (!isAlreadyOnPage) {
+        const [sKey, vKey] = activeVerseKey.split(':');
+        const sNum = Number(sKey);
+        const vNum = Number(vKey);
+        if (!isNaN(sNum) && !isNaN(vNum)) {
+          // Check if we can find page number in loaded default verses
+          const loadedVerse = verses.find(v => v.verse_key === activeVerseKey);
+          if (loadedVerse && loadedVerse.page_number) {
+            setMushafPage(loadedVerse.page_number);
+          } else {
+            // Rough estimation fallback capped by next surah boundary
+            const startPage = SURAH_START_PAGES[sNum] || 1;
+            const nextSurahStartPage = SURAH_START_PAGES[sNum + 1] || 605;
+            const estimatedPage = Math.min(startPage + Math.floor((vNum - 1) / 10), nextSurahStartPage - 1);
+            setMushafPage(Math.max(1, estimatedPage));
+          }
+        }
+      }
+    }
+  }, [activeVerseKey, mushafMode, verses, mushafPageVerses]);
 
   // Key Down listeners for Left/Right arrows in Mushaf View
   useEffect(() => {
@@ -346,59 +417,18 @@ export default function SurahReading({
     <div className="flex flex-col gap-6 w-full pb-36" ref={scrollContainerRef}>
       {/* Top Reading Preference Toolbar */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 p-5 rounded-2xl bg-[#faf6ec] dark:bg-[#031c11] border-2 border-gold-400/30 dark:border-gold-500/20 shadow-sm">
-        {/* Left Actions: Translation & Word-by-Word toggle */}
+        {/* Left Actions: Mushaf view mode toggler */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-          {/* Translation select */}
-          <div className="flex items-center gap-3">
-            <label htmlFor="translation-select" className="text-xs text-emerald-900 dark:text-gold-300 font-bold whitespace-nowrap">
-              {isArabic ? 'الترجمة المعروضة:' : 'English translation:'}
-            </label>
-            <select
-              id="translation-select"
-              value={translationId}
-              onChange={(e) => {
-                onTranslationChange(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-              className="bg-white dark:bg-[#02140c] border-2 border-gold-400/25 dark:border-gold-500/15 text-stone-900 dark:text-gold-100 text-xs rounded-xl p-2 focus:border-gold-400 focus:ring-0 outline-none hover:bg-stone-50 transition font-semibold min-w-[200px]"
-            >
-              {POPULAR_TRANSLATIONS.map((trans) => (
-                <option key={trans.id} value={trans.id} className="dark:bg-[#021c10] text-xs">
-                  {trans.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Word-by-Word translation mode switch toggle */}
-          <div className="flex items-center gap-3 border-t sm:border-t-0 sm:border-l border-gold-400/25 pt-3 sm:pt-0 sm:pl-4">
-            <label htmlFor="wbw-switch" className="text-xs text-emerald-900 dark:text-gold-300 font-bold whitespace-nowrap">
-              {isArabic ? 'عرض كلمة بكلمة:' : 'Word-by-Word Mode:'}
-            </label>
-            <button
-              id="wbw-switch"
-              onClick={() => setWbwEnabled(!wbwEnabled)}
-              title={isArabic ? 'تفعيل وضع نطق وترجمة كل كلمة بمفردها' : 'Toggle interactive word translations and pronunciation audios'}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${
-                wbwEnabled ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-stone-300 dark:bg-emerald-950/80 border border-gold-400/15'
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-                  wbwEnabled ? 'translate-x-5' : 'translate-x-0'
-                }`}
-              />
-            </button>
-            <span className="text-[11px] font-bold text-stone-600 dark:text-gold-200">
-              {wbwEnabled ? (isArabic ? 'مفعّل' : 'ON') : (isArabic ? 'ملغى' : 'OFF')}
-            </span>
+          <div className="flex items-center gap-1.5 py-1.5 text-[#113f28] dark:text-gold-300 font-bold">
+            <span>✨</span>
+            <span className="text-xs font-serif font-black">{isArabic ? 'تلاوة ومطالعة آيات الذكر الحكيم' : 'Noble Quran Recitation & Reading'}</span>
           </div>
 
           {/* Scanned Mushaf Page Toggler */}
           <div className="flex items-center gap-3 border-t sm:border-t-0 sm:border-l border-gold-400/25 pt-3 sm:pt-0 sm:pl-4">
             <button
               onClick={() => {
-                setMushafMode(!mushafMode);
+                onToggleMushaf();
                 if (!mushafMode) {
                   const sPage = SURAH_START_PAGES[activeSurah] || 1;
                   setMushafPage(sPage);
@@ -541,6 +571,19 @@ export default function SurahReading({
               >
                 <span>{isArabic ? 'القراءة الليلية 🌙' : 'Night Read 🌙'}</span>
               </button>
+
+              {/* Ultra Sharp Mode Toggle for Scans */}
+              <button
+                onClick={() => setExtraSharp(!extraSharp)}
+                className={`p-2 rounded-xl border transition cursor-pointer flex items-center justify-center gap-1.5 text-xs font-serif font-black ${
+                  extraSharp
+                    ? 'bg-emerald-900 text-gold-300 border-gold-400/30 dark:bg-gold-500/15 dark:text-gold-250 font-extrabold'
+                    : 'bg-stone-55 border-stone-200 dark:bg-emerald-950/30 dark:border-gold-400/10 text-stone-700 dark:text-gold-300'
+                }`}
+                title={isArabic ? 'تفعيل تصفية وتحسين تباين الكلمات لأقصى وضوح' : 'Toggle Ultra-Sharp Image Contrast Filter'}
+              >
+                <span>{isArabic ? 'أقصى وضوح ✨' : 'Ultra-Sharp Contrast ✨'}</span>
+              </button>
             </div>
 
           </div>
@@ -559,50 +602,171 @@ export default function SurahReading({
             <span className="text-xs font-bold text-stone-500 dark:text-gold-400 font-serif">604</span>
           </div>
 
-          {/* Scanned Image Main Container */}
-          <div className="relative w-full flex justify-center items-center overflow-auto rounded-2xl bg-[#EBE7D9] dark:bg-[#01140a] p-4 sm:p-8 border-4 border-gold-400/30 dark:border-gold-500/15 max-h-[1000px] shadow-lg group">
+          {/* Main Content Layout Block: Interactive Multi-pane Split Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 w-full items-start" id="mushaf-interactive-split-grid">
             
-            {/* Desktop Quick Left/Right page-turn buttons */}
-            <button
-              onClick={handlePrevMushafPage}
-              disabled={mushafPage <= 1}
-              className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white/95 dark:bg-[#021c10]/95 hover:bg-gold-400 text-stone-900 shadow-xl rounded-full transition duration-300 opacity-0 group-hover:opacity-100 disabled:opacity-0 active:scale-90 flex items-center justify-center cursor-pointer border border-[#ddd3b0]/55 z-20"
-              title={isArabic ? 'الصفحة السابقة' : 'Previous page'}
-            >
-              <ChevronLeft className="w-6 h-6 text-emerald-900" />
-            </button>
-
-            <button
-              onClick={handleNextMushafPage}
-              disabled={mushafPage >= 604}
-              className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white/95 dark:bg-[#021c10]/95 hover:bg-gold-400 text-stone-900 shadow-xl rounded-full transition duration-300 opacity-0 group-hover:opacity-100 disabled:opacity-0 active:scale-90 flex items-center justify-center cursor-pointer border border-[#ddd3b0]/55 z-20"
-              title={isArabic ? 'الصفحة التالية' : 'Next page'}
-            >
-              <ChevronRight className="w-6 h-6 text-emerald-900" />
-            </button>
-
-            {/* Centralized image itself */}
-            <div className="relative flex justify-center w-full transition-all duration-350" style={{ maxWidth: '100%' }}>
-              <img
-                src={`https://android.quran.com/data/zips/images_1920/width_1260/page${String(mushafPage).padStart(3, '0')}.png`}
-                alt={`سورة ${activeSurahDetail?.name_arabic || ''} - صفحة ${mushafPage}`}
-                className="shadow-3xl rounded-xl border border-stone-200/50 select-none duration-500 max-w-full"
-                referrerPolicy="no-referrer"
-                loading="eager"
-                style={{
-                  filter: invertMushaf ? 'invert(1) hue-rotate(180deg) brightness(0.95) contrast(1.1)' : 'none',
-                  width: `${zoomLevel}%`,
-                  maxWidth: '100%',
-                  height: 'auto',
-                }}
-              />
+            {/* Scanned Mushaf Page Scan Image */}
+            <div className="col-span-1 lg:col-span-7 xl:col-span-8 flex flex-col items-center justify-center relative w-full overflow-hidden rounded-2xl bg-[#EBE7D9] dark:bg-[#01140a] p-4 sm:p-7 border-4 border-gold-400/30 dark:border-gold-500/15 min-h-[500px] max-h-[1050px] shadow-lg group">
+              
+              {/* Desktop Quick Left/Right page-turn buttons */}
+              <button
+                onClick={handlePrevMushafPage}
+                disabled={mushafPage <= 1}
+                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white/95 dark:bg-[#021c10]/95 hover:bg-gold-400 text-stone-900 shadow-xl rounded-full transition duration-300 opacity-0 group-hover:opacity-100 disabled:opacity-0 active:scale-95 flex items-center justify-center cursor-pointer border border-[#ddd3b0]/55 z-20"
+                title={isArabic ? 'الصفحة السابقة' : 'Previous page'}
+              >
+                <ChevronLeft className="w-6 h-6 text-emerald-950" />
+              </button>
+ 
+              <button
+                onClick={handleNextMushafPage}
+                disabled={mushafPage >= 604}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white/95 dark:bg-[#021c10]/95 hover:bg-gold-400 text-stone-900 shadow-xl rounded-full transition duration-300 opacity-0 group-hover:opacity-100 disabled:opacity-0 active:scale-95 flex items-center justify-center cursor-pointer border border-[#ddd3b0]/55 z-20"
+                title={isArabic ? 'الصفحة التالية' : 'Next page'}
+              >
+                <ChevronRight className="w-6 h-6 text-emerald-950" />
+              </button>
+ 
+              {/* Centralized image itself with tiered fallback urls */}
+              <div className="relative flex justify-center w-full transition-all duration-350" style={{ maxWidth: '100%' }}>
+                <img
+                  key={mushafPage}
+                  src={
+                    imageErrorCount === 0
+                      ? `https://cdn.jsdelivr.net/gh/spaorland/quran_images@master/images/page${String(mushafPage).padStart(3, '0')}.png`
+                      : imageErrorCount === 1
+                        ? `https://raw.githubusercontent.com/spaorland/quran_images/master/images/page${String(mushafPage).padStart(3, '0')}.png`
+                        : imageErrorCount === 2
+                          ? `https://quran.ksu.edu.sa/png_big/${mushafPage}.png`
+                          : `https://cdn.jsdelivr.net/gh/salman-b/quran-pages@master/png/${mushafPage}.png`
+                  }
+                  alt={`سورة ${activeSurahDetail?.name_arabic || ''} - صفحة ${mushafPage}`}
+                  className="shadow-3xl rounded-xl border border-stone-250/20 dark:border-emerald-950/30 select-none duration-550 max-w-full"
+                  referrerPolicy="no-referrer"
+                  loading="eager"
+                  onError={() => {
+                    console.warn(`Failed loading image, trying fallback stage ${imageErrorCount + 1}`);
+                    setImageErrorCount((prev) => prev + 1);
+                  }}
+                  style={{
+                    filter: invertMushaf
+                      ? `invert(1) hue-rotate(180deg) brightness(1.08) contrast(1.15) ${extraSharp ? 'contrast(1.12)' : ''}`
+                      : `${extraSharp ? 'contrast(1.14) brightness(0.98) saturate(1.02)' : ''}`.trim() || 'none',
+                    width: `${zoomLevel}%`,
+                    maxWidth: '100%',
+                    height: 'auto',
+                    imageRendering: extraSharp ? 'crisp-edges' : 'auto',
+                    WebkitImageRendering: extraSharp ? '-webkit-optimize-contrast' : 'auto',
+                    transform: 'translateZ(0)',
+                    backfaceVisibility: 'hidden',
+                  }}
+                />
+              </div>
             </div>
-          </div>
 
+            {/* Right side: Interactive Translation & Study Panel */}
+            <div className="col-span-1 lg:col-span-5 xl:col-span-4 flex flex-col gap-4 p-5 rounded-2xl bg-[#faf6ec] dark:bg-[#03140c] border border-gold-400/20 dark:border-gold-500/10 shadow-sm max-h-[1050px] w-full">
+              <div className="flex items-center justify-between pb-3 border-b border-gold-400/20">
+                <span className="text-xs font-serif font-black text-[#0c2e1c] dark:text-gold-250">
+                  {isArabic ? 'آيات الصفحة وتحليلها' : 'Ayahs on this Page'}
+                </span>
+                <span className="text-[10px] font-mono select-none px-2.5 py-0.5 rounded-full bg-gold-400/10 border border-gold-400/30 text-gold-500 font-bold">
+                  {isArabic ? `${mushafPageVerses.length} آية` : `${mushafPageVerses.length} ayahs`}
+                </span>
+              </div>
+
+              {isMushafPageLoading ? (
+                <div className="flex flex-col items-center justify-center py-24 gap-3 text-gold-500 text-center w-full">
+                  <span className="w-7 h-7 rounded-full border-2 border-gold-400 border-t-transparent animate-spin" />
+                  <p className="text-[11px] font-serif italic text-stone-500 dark:text-gold-300/80">
+                    {isArabic ? 'تحميل ترجمات وتفاسير الآيات المرافقة...' : 'Loading companion translations...'}
+                  </p>
+                </div>
+              ) : mushafPageVerses.length > 0 ? (
+                <div className="flex flex-col gap-3.5 overflow-y-auto max-h-[850px] pr-1.5 scrollbar-thin scrollbar-thumb-gold-400/30 scrollbar-track-transparent">
+                  {mushafPageVerses.map((v) => {
+                    const isHighlighted = activeVerseKey === v.verse_key;
+                    const isBookmarked = bookmarkedVerseKey === v.verse_key;
+
+                    return (
+                      <div
+                        key={v.id}
+                        onClick={() => onVersePlayClick(v.verse_key)}
+                        className={`p-4 rounded-xl border transition-all duration-300 text-right cursor-pointer flex flex-col gap-3 relative group/card ${
+                          isHighlighted
+                            ? 'bg-[#f4efe0] dark:bg-emerald-950/30 border-gold-400 dark:border-gold-500 shadow-md ring-1 ring-gold-400/15'
+                            : 'bg-white/90 dark:bg-[#02130b]/70 border-[#eae1cd] dark:border-emerald-900/10 hover:border-gold-400/30'
+                        }`}
+                      >
+                        {/* Card metadata label & control toolbar */}
+                        <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1.5">
+                            {/* Play Button */}
+                            <button
+                              onClick={() => onVersePlayClick(v.verse_key)}
+                              className={`p-1.5 rounded-lg transition-colors duration-200 cursor-pointer ${
+                                isHighlighted 
+                                  ? 'bg-gold-500 text-[#0c2e1c]' 
+                                  : 'bg-stone-50 dark:bg-emerald-950/40 text-stone-500 hover:text-emerald-900 dark:hover:text-gold-300 hover:bg-gold-400/15'
+                              }`}
+                              title={isArabic ? 'تشغيل المرتل / إيقاف مؤقت' : 'Play Reciter / Pause'}
+                            >
+                              {isHighlighted && isAudioPlaying ? (
+                                <Pause className="w-3.5 h-3.5" />
+                              ) : (
+                                <Play className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+
+                            {/* Bookmark Button */}
+                            <button
+                              onClick={() => onToggleBookmark(v.verse_key)}
+                              className={`p-1.5 rounded-lg transition-colors duration-200 cursor-pointer ${
+                                isBookmarked 
+                                  ? 'bg-red-500/15 text-red-600' 
+                                  : 'bg-stone-50 dark:bg-emerald-950/40 text-stone-550 hover:bg-gold-400/15'
+                              }`}
+                              title={isArabic ? 'حفظ للتلاوة لاحقاً' : 'Bookmark Ayah'}
+                            >
+                              <Bookmark className="w-3.5 h-3.5" fill={isBookmarked ? 'currentColor' : 'none'} />
+                            </button>
+
+                            {/* Study / Tafsir Sparkle button */}
+                            <button
+                              onClick={() => onVerseStudyClick(v.verse_key, v.text_uthmani || '')}
+                              className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-850 dark:text-gold-350 hover:bg-emerald-500/15 hover:text-emerald-950 transition cursor-pointer"
+                              title={isArabic ? 'البحث في كتب التفسير والتدبر كالتبر الشافي' : 'Open Tafsir details'}
+                            >
+                              <Sparkles className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <span className="text-[10px] font-mono font-bold bg-[#eae1cd]/50 dark:bg-emerald-950/40 text-[#4c3c1b] dark:text-gold-300/80 px-2 py-0.5 rounded border border-[#ddd3b0]/30 select-all">
+                            {v.verse_key}
+                          </span>
+                        </div>
+
+                        {/* Uthmani text */}
+                        <p className="font-scheherazade text-xl sm:text-2xl text-[#0c2e1c] dark:text-gold-250 select-all leading-relaxed font-bold tracking-wide">
+                          {v.text_uthmani}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-10 text-stone-400 text-xs italic">
+                  {isArabic ? 'لم تتوفر آيات للمطالعة حالياً.' : 'No verses available to view.'}
+                </div>
+              )}
+            </div>
+
+          </div>
+ 
           <div className="text-center font-serif text-xs text-stone-400 py-2">
             {isArabic 
-              ? 'تلميح: يمكنك استخدام أزرار الأسهم يميناً ويساراً في لوحة المفاتيح لتصفح الصفحات لمزيد من السهولة.' 
-              : 'Tip: You can use the left and right arrow keys on your keyboard to turn pages easily.'}
+              ? 'تلميح تلاوة: يمكنك استخدام أزرار الأسهم يميناً ويساراً في لوحة المفاتيح لتصفح الصفحات لمزيد من السهولة. انقر على أي آية من قائمة التفسير للاستماع أو قراءة شرحها.' 
+              : 'Recitation Tip: You can use the left and right arrow keys on your keyboard to turn pages easily. Click any verse from the side list to recite or read Tafsir.'}
           </div>
         </div>
       ) : (
@@ -748,7 +912,7 @@ export default function SurahReading({
                   </div>
                 </div>
 
-                {/* Verse body - Uthmani Arabic Script with beautiful glowing manuscript highlights or Word-By-Word mode */}
+                {/* Verse body - Uthmani Arabic Script with beautiful glowing manuscript highlights */}
                 <div 
                   className={`text-right py-4 px-5 my-2 leading-relaxed transition-all duration-300 rounded-xl ${
                     isHighlighted 
@@ -757,116 +921,24 @@ export default function SurahReading({
                   }`} 
                   style={{ direction: 'rtl' }}
                 >
-                  {wbwEnabled ? (
-                    <div className="flex flex-row-reverse flex-wrap gap-x-3 gap-y-4 items-center justify-start leading-[2.6]">
-                      {verse.words && verse.words.length > 0 ? (
-                        verse.words.map((word) => {
-                          const isWordActive = activeWordId === word.id || (isHighlighted && activeWordPosition === word.position);
-                          return (
-                            <div
-                              key={word.id}
-                              onClick={(e) => {
-                                e.stopPropagation(); // Avoid playing the entire verse when clicking a single word
-                                if (word.audio_url) {
-                                  playWordAudio(word.audio_url, word.id);
-                                }
-                              }}
-                              className={`flex flex-col items-center px-2 py-1.5 rounded-xl border transition-all duration-300 cursor-help select-none ${
-                                isWordActive
-                                  ? 'bg-emerald-500/15 border-emerald-400 dark:border-emerald-500 scale-[1.08] shadow-sm ring-1 ring-emerald-500'
-                                  : 'border-transparent hover:bg-gold-400/10 hover:border-gold-400/25 dark:hover:bg-emerald-900/10'
-                              }`}
-                              title={isArabic 
-                                ? `اضغط للاستماع لنطق كلمة: "${word.text_uthmani}" (${word.transliteration?.text || ''})` 
-                                : `Click to hear audio pronunciation for: "${word.text_uthmani}" (${word.transliteration?.text || ''})`
-                              }
-                            >
-                              {/* Arabic Word Script */}
-                              <span
-                                className={`font-scheherazade leading-none tracking-wide text-center antialiased transition-colors duration-300 ${
-                                  isWordActive
-                                    ? 'text-emerald-600 dark:text-emerald-400 font-bold'
-                                    : isHighlighted
-                                    ? 'text-emerald-950 dark:text-[#ccf2e2] font-semibold'
-                                    : 'text-[#062416] dark:text-stone-100 font-medium'
-                                }`}
-                                style={{ fontSize: `${24 * textScale}px` }}
-                              >
-                                {word.text_uthmani}
-                              </span>
-                              
-                              {/* Transliteration (Phonetics) */}
-                              {word.transliteration && (
-                                <span className="text-[10px] font-sans text-stone-500 dark:text-gold-300/80 mt-1.5 font-semibold leading-none tracking-normal">
-                                  {word.transliteration.text}
-                                </span>
-                              )}
-                              
-                              {/* Meaning translation */}
-                              {word.translation && (
-                                <span className="text-[10px] font-sans text-emerald-800 dark:text-emerald-400 font-bold mt-1 leading-none max-w-[95px] truncate text-center">
-                                  {word.translation.text}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <span className="text-xs italic text-stone-400">
-                          {isArabic ? 'جاري تحميل تفصيل الكلمات...' : 'Loading word translations...'}
-                        </span>
-                      )}
-
-                      {/* End of verse ayah marker */}
-                      <span className={`inline-block font-serif font-black align-middle mx-1.5 text-lg leading-none select-none transition-colors duration-300 ${
-                        isHighlighted ? 'text-emerald-600 dark:text-emerald-400 scale-[1.1]' : 'text-gold-500 dark:text-gold-400'
-                      }`}>
-                        ﴿{verse.verse_number}﴾
-                      </span>
-                    </div>
-                  ) : (
-                    <p
-                      className={`font-scheherazade select-all max-w-full inline-block leading-[2.4] tracking-wide antialiased transition-all duration-300 ${
-                        isHighlighted 
-                          ? 'text-[#012412] dark:text-[#ccf2e2] font-bold drop-shadow-[0_1px_3px_rgba(16,185,129,0.15)]' 
-                          : 'text-[#062416] dark:text-stone-100 font-medium'
-                      }`}
-                      style={{
-                        fontSize: `${23 * textScale}px`,
-                      }}
-                    >
-                      {verse.text_uthmani}{' '}
-                      <span className={`inline-block font-serif font-black align-middle mx-1.5 text-lg leading-none select-none transition-colors duration-300 ${
-                        isHighlighted ? 'text-emerald-600 dark:text-emerald-400 scale-[1.1]' : 'text-gold-500 dark:text-gold-400'
-                      }`}>
-                         ﴿{verse.verse_number}﴾
-                       </span>
-                    </p>
-                  )}
+                  <p
+                    className={`font-scheherazade select-all max-w-full inline-block leading-[2.4] tracking-wide antialiased transition-all duration-300 ${
+                      isHighlighted 
+                        ? 'text-[#012412] dark:text-[#ccf2e2] font-bold drop-shadow-[0_1px_3px_rgba(16,185,129,0.15)]' 
+                        : 'text-[#062416] dark:text-stone-100 font-medium'
+                    }`}
+                    style={{
+                      fontSize: `${23 * textScale}px`,
+                    }}
+                  >
+                    {verse.text_uthmani}{' '}
+                    <span className={`inline-block font-serif font-black align-middle mx-1.5 text-lg leading-none select-none transition-colors duration-300 ${
+                      isHighlighted ? 'text-emerald-600 dark:text-emerald-400 scale-[1.1]' : 'text-gold-500 dark:text-gold-400'
+                    }`}>
+                       ﴿{verse.verse_number}﴾
+                     </span>
+                  </p>
                 </div>
-
-                {/* Translation display text */}
-                {!isArabic && (
-                  <div className={`text-left mt-2 border-t border-gold-400/5 pt-2 px-1 transition-all duration-300 ${
-                    isHighlighted ? 'bg-emerald-500/[0.03] rounded-lg p-2 border-l-2 border-emerald-500/40' : ''
-                  }`}>
-                    {verse.translations && verse.translations.length > 0 ? (
-                      <p
-                        className={`leading-relaxed font-sans transition-colors duration-300 ${
-                          isHighlighted 
-                            ? 'text-stone-900 dark:text-[#d1fae5] font-bold' 
-                            : 'text-stone-700 dark:text-gold-100/90 font-medium'
-                        }`}
-                        style={{ fontSize: `${14.5 * textScale}px` }}
-                        dangerouslySetInnerHTML={{ __html: verse.translations[0].text }}
-                      />
-                    ) : (
-                      <p className="text-xs italic text-stone-400">
-                        {isArabic ? 'الترجمة غير متوفرة.' : 'Translation data unavailable.'}
-                      </p>
-                    )}
-                  </div>
-                )}
 
 
                 {/* Inline Tafsir Block (تفسير الآية) */}

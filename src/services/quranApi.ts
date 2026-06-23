@@ -116,6 +116,7 @@ export async function fetchChapterVerses(
           verse_number: v.verse_number,
           verse_key: v.verse_key,
           juz_number: v.juz_number,
+          page_number: v.page_number,
           text_uthmani: v.text_uthmani,
           translations: v.translations,
           words: verseWords
@@ -148,6 +149,68 @@ export async function fetchChapterVerses(
       };
     }
     return { verses: [], totalPages: 1, currentPage: 1 };
+  }
+}
+
+/**
+ * Fetches all verses residing on a specific physical page (1 to 604) in the Madani Mushaf
+ */
+export async function fetchPageVerses(
+  pageNumber: number,
+  translationId: number = 131
+): Promise<Verse[]> {
+  try {
+    const response = await fetch(
+      `${BASE_URL}/verses/by_page/${pageNumber}?language=en&translations=${translationId}&fields=text_uthmani&page=1&per_page=50&words=true`
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to fetch verses for page ${pageNumber}`);
+    }
+    const data = await response.json();
+    if (data.verses && data.verses.length > 0) {
+      return data.verses.map((v: any) => {
+        const verseWords = v.words ? v.words.map((w: any) => {
+          let cleanAudioUrl = w.audio_url || '';
+          if (cleanAudioUrl) {
+            if (cleanAudioUrl.startsWith('//')) {
+              cleanAudioUrl = 'https:' + cleanAudioUrl;
+            } else if (!cleanAudioUrl.startsWith('http')) {
+              cleanAudioUrl = 'https://audio.qurancdn.com/' + cleanAudioUrl;
+            }
+          }
+          return {
+            id: w.id,
+            position: w.position,
+            text_uthmani: w.text_uthmani || w.text || '',
+            text: w.text || w.text_uthmani || '',
+            transliteration: w.transliteration ? {
+              text: w.transliteration.text || '',
+              language_name: w.transliteration.language_name || 'english'
+            } : undefined,
+            translation: w.translation ? {
+              text: w.translation.text || '',
+              language_name: w.translation.language_name || 'english'
+            } : undefined,
+            audio_url: cleanAudioUrl
+          };
+        }) : [];
+
+        return {
+          id: v.id,
+          verse_number: v.verse_number,
+          verse_key: v.verse_key,
+          juz_number: v.juz_number,
+          page_number: v.page_number || pageNumber,
+          text_uthmani: v.text_uthmani,
+          translations: v.translations,
+          words: verseWords
+        };
+      });
+    }
+    return [];
+  } catch (error) {
+    console.error(`Error fetching verses for page ${pageNumber}:`, error);
+    return [];
   }
 }
 
