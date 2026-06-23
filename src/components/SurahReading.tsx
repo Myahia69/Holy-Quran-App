@@ -26,6 +26,55 @@ interface SurahReadingProps {
   selectedTafsirId: number;
 }
 
+const SURAH_START_PAGES = [
+  0, // Dummy
+  1, 2, 50, 77, 106, 128, 151, 177, 187, 208, // 1-10
+  221, 235, 249, 255, 262, 267, 282, 293, 305, 312, // 11-20
+  322, 332, 342, 350, 359, 367, 377, 385, 396, 404, // 21-30
+  411, 415, 418, 428, 434, 440, 446, 453, 458, 467, // 31-40
+  477, 483, 489, 496, 499, 502, 507, 511, 515, 518, // 41-50
+  520, 523, 526, 528, 531, 534, 537, 542, 545, 549, // 51-60
+  551, 553, 554, 556, 558, 560, 562, 564, 566, 568, // 61-70
+  570, 572, 574, 575, 577, 578, 580, 582, 583, 585, // 71-80
+  586, 587, 587, 589, 590, 591, 591, 592, 593, 594, // 81-90
+  595, 595, 596, 596, 597, 597, 598, 598, 599, 599, // 91-100
+  600, 600, 601, 601, 601, 602, 602, 602, 603, 603, // 101-110
+  603, 604, 604, 604 // 111-114
+];
+
+const getJuzOfPage = (p: number): number => {
+  if (p <= 21) return 1;
+  if (p <= 41) return 2;
+  if (p <= 61) return 3;
+  if (p <= 81) return 4;
+  if (p <= 101) return 5;
+  if (p <= 121) return 6;
+  if (p <= 141) return 7;
+  if (p <= 161) return 8;
+  if (p <= 181) return 9;
+  if (p <= 201) return 10;
+  if (p <= 221) return 11;
+  if (p <= 241) return 12;
+  if (p <= 261) return 13;
+  if (p <= 281) return 14;
+  if (p <= 301) return 15;
+  if (p <= 321) return 16;
+  if (p <= 341) return 17;
+  if (p <= 361) return 18;
+  if (p <= 381) return 19;
+  if (p <= 401) return 20;
+  if (p <= 421) return 21;
+  if (p <= 441) return 22;
+  if (p <= 461) return 23;
+  if (p <= 481) return 24;
+  if (p <= 501) return 25;
+  if (p <= 521) return 26;
+  if (p <= 541) return 27;
+  if (p <= 561) return 28;
+  if (p <= 581) return 29;
+  return 30;
+};
+
 export default function SurahReading({
   activeSurah,
   activeSurahDetail,
@@ -47,6 +96,31 @@ export default function SurahReading({
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [copiedVerseKey, setCopiedVerseKey] = useState<string>('');
+
+  const [mushafMode, setMushafMode] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('quran_mushaf_view_mode');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [mushafPage, setMushafPage] = useState<number>(() => {
+    const start = SURAH_START_PAGES[activeSurah] || 1;
+    return start;
+  });
+
+  const [invertMushaf, setInvertMushaf] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('quran_mushaf_invert');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [zoomLevel, setZoomLevel] = useState<number>(100);
 
   const [tafsirs, setTafsirs] = useState<Record<string, string>>({});
   const [isTafsirsLoading, setIsTafsirsLoading] = useState<boolean>(false);
@@ -104,6 +178,60 @@ export default function SurahReading({
     setVerses([]);
     setTafsirs({});
   }, [activeSurah]);
+
+  // Synchronize localStorage for visual preferrences
+  useEffect(() => {
+    try {
+      localStorage.setItem('quran_mushaf_view_mode', String(mushafMode));
+    } catch {}
+  }, [mushafMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('quran_mushaf_invert', String(invertMushaf));
+    } catch {}
+  }, [invertMushaf]);
+
+  // Sync Mushaf Page when Surah changes from parent select
+  useEffect(() => {
+    const sPage = SURAH_START_PAGES[activeSurah] || 1;
+    setMushafPage(sPage);
+  }, [activeSurah]);
+
+  // Key Down listeners for Left/Right arrows in Mushaf View
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!mushafMode) return;
+      if (document.activeElement?.tagName === 'INPUT') return;
+      
+      if (e.key === 'ArrowLeft') {
+        if (mushafPage < 604) {
+          setMushafPage((p) => p + 1);
+        }
+      } else if (e.key === 'ArrowRight') {
+        if (mushafPage > 1) {
+          setMushafPage((p) => p - 1);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [mushafMode, mushafPage]);
+
+  const handlePrevMushafPage = () => {
+    if (mushafPage > 1) {
+      setMushafPage((p) => p - 1);
+    }
+  };
+
+  const handleNextMushafPage = () => {
+    if (mushafPage < 604) {
+      setMushafPage((p) => p + 1);
+    }
+  };
 
   // Load Tafsir text for all verses on the current page
   useEffect(() => {
@@ -265,6 +393,28 @@ export default function SurahReading({
               {wbwEnabled ? (isArabic ? 'مفعّل' : 'ON') : (isArabic ? 'ملغى' : 'OFF')}
             </span>
           </div>
+
+          {/* Scanned Mushaf Page Toggler */}
+          <div className="flex items-center gap-3 border-t sm:border-t-0 sm:border-l border-gold-400/25 pt-3 sm:pt-0 sm:pl-4">
+            <button
+              onClick={() => {
+                setMushafMode(!mushafMode);
+                if (!mushafMode) {
+                  const sPage = SURAH_START_PAGES[activeSurah] || 1;
+                  setMushafPage(sPage);
+                }
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-serif font-black transition cursor-pointer select-none border border-gold-400/30 ${
+                mushafMode
+                  ? 'bg-gold-400 text-emerald-950 font-extrabold shadow-md'
+                  : 'bg-white dark:bg-[#02140c] text-emerald-950 dark:text-gold-250 hover:bg-gold-400/10'
+              }`}
+              title={isArabic ? 'العرض بالصفحات المصورة (المصحف المصور)' : 'Toggle high quality printed Madinah Mushaf page view'}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>{isArabic ? 'المصحف للقراءة' : 'Mushaf Page View'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Info panel of the Surah */}
@@ -288,7 +438,7 @@ export default function SurahReading({
       </div>
 
       {/* Surah Bismillah Banner if not Al-Tawbah (9) and if chapter requests bismillah_pre */}
-      {activeSurah !== 9 && activeSurahDetail?.bismillah_pre && currentPage === 1 && (
+      {!mushafMode && activeSurah !== 9 && activeSurahDetail?.bismillah_pre && currentPage === 1 && (
         <div className="text-center py-10 flex flex-col items-center justify-center relative" id="bismillah-banner">
           <div className="w-24 h-[1px] bg-gradient-to-r from-transparent via-gold-400 to-transparent mb-4" />
           <p
@@ -300,8 +450,164 @@ export default function SurahReading({
         </div>
       )}
 
-      {/* Verses Delivery Cards */}
-      <div className="flex flex-col gap-4 relative">
+      {mushafMode ? (
+        <div className="flex flex-col gap-6 items-center w-full animate-fadeIn">
+          {/* Mushaf Page Control Bar */}
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 rounded-xl bg-white dark:bg-[#02140c] border border-gold-400/20 dark:border-gold-500/10 w-full shadow-sm">
+            
+            {/* Left page adjustment controls */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handlePrevMushafPage}
+                className="p-2.5 rounded-xl border border-gold-400/25 hover:border-gold-400 text-stone-700 dark:text-gold-200 bg-stone-50 dark:bg-emerald-950/20 hover:bg-gold-400/10 transition cursor-pointer disabled:opacity-50 disabled:pointer-events-none active:scale-95 flex items-center justify-center"
+                disabled={mushafPage <= 1}
+                title={isArabic ? 'الصفحة السابقة' : 'Previous page'}
+              >
+                <ChevronRight className="w-5 h-5 font-bold" />
+                <span className="text-xs font-serif font-black pr-1">{isArabic ? 'السابقة' : 'Prev'}</span>
+              </button>
+
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-stone-50 dark:bg-[#031d10] border border-gold-400/10 rounded-lg">
+                <span className="text-xs font-serif font-black text-stone-850 dark:text-gold-200">
+                  {isArabic ? 'الصفحة' : 'Page'}
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={604}
+                  value={mushafPage}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= 1 && val <= 604) {
+                      setMushafPage(val);
+                    }
+                  }}
+                  className="w-12 text-center bg-white dark:bg-emerald-950/30 border border-gold-400/25 rounded p-0.5 text-xs text-stone-900 dark:text-gold-150 font-bold focus:ring-0 outline-none"
+                />
+                <span className="text-xs text-stone-400 dark:text-gold-500/40">/ 604</span>
+              </div>
+
+              <button
+                onClick={handleNextMushafPage}
+                className="p-2.5 rounded-xl border border-gold-400/25 hover:border-gold-400 text-stone-700 dark:text-gold-200 bg-stone-50 dark:bg-emerald-950/20 hover:bg-gold-400/10 transition cursor-pointer disabled:opacity-50 disabled:pointer-events-none active:scale-95 flex items-center justify-center"
+                disabled={mushafPage >= 604}
+                title={isArabic ? 'الصفحة التالية' : 'Next page'}
+              >
+                <span className="text-xs font-serif font-black pl-1">{isArabic ? 'التالية' : 'Next'}</span>
+                <ChevronLeft className="w-5 h-5 font-bold" />
+              </button>
+            </div>
+
+            {/* Middle: Juz & active Surah identifiers */}
+            <div className="text-center font-serif py-1 md:py-0">
+              <p className="text-sm font-black text-emerald-950 dark:text-gold-200">
+                {isArabic ? `الجزء ${getJuzOfPage(mushafPage)}` : `Juz ${getJuzOfPage(mushafPage)}`}
+              </p>
+              <p className="text-xs text-stone-500 dark:text-stone-350 font-semibold mt-0.5">
+                {isArabic ? `سورة ${activeSurahDetail?.name_arabic || ''}` : `Surah ${activeSurahDetail?.name_complex || ''}`}
+              </p>
+            </div>
+
+            {/* Right: Night filter / zoom options */}
+            <div className="flex items-center gap-3">
+              {/* Zoom controls */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setZoomLevel((prev) => Math.max(prev - 10, 50))}
+                  className="p-2 rounded-lg hover:bg-stone-50 dark:hover:bg-emerald-950/20 text-stone-500 dark:text-gold-300 transition"
+                  title={isArabic ? 'تصغير' : 'Zoom Out'}
+                >
+                  <span className="text-xs font-black">-</span>
+                </button>
+                <span className="text-xs font-mono font-bold text-stone-500 dark:text-gold-400">{zoomLevel}%</span>
+                <button
+                  onClick={() => setZoomLevel((prev) => Math.min(prev + 10, 200))}
+                  className="p-2 rounded-lg hover:bg-stone-50 dark:hover:bg-emerald-950/20 text-stone-500 dark:text-gold-300 transition"
+                  title={isArabic ? 'تكبير' : 'Zoom In'}
+                >
+                  <span className="text-xs font-black">+</span>
+                </button>
+              </div>
+
+              {/* Night Mode Toggle for Scans */}
+              <button
+                onClick={() => setInvertMushaf(!invertMushaf)}
+                className={`p-2 rounded-xl border transition cursor-pointer flex items-center justify-center gap-1.5 text-xs font-serif font-black ${
+                  invertMushaf
+                    ? 'bg-gold-400/25 text-gold-350 border-gold-400/40 font-extrabold'
+                    : 'bg-stone-55 border-stone-200 dark:bg-emerald-950/30 dark:border-gold-400/10 text-stone-700 dark:text-gold-300'
+                }`}
+                title={isArabic ? 'تبديل وضع اللياقة البصرية / القراءة الليلية' : 'Toggle Night Read Visibility Filter'}
+              >
+                <span>{isArabic ? 'القراءة الليلية 🌙' : 'Night Read 🌙'}</span>
+              </button>
+            </div>
+
+          </div>
+
+          {/* Quick Page Slider */}
+          <div className="w-full flex items-center gap-4 px-4 py-2.5 rounded-xl bg-amber-500/5 dark:bg-[#031d10]/20 border border-gold-400/10">
+            <span className="text-xs font-bold text-stone-500 dark:text-gold-400 font-serif">1</span>
+            <input
+              type="range"
+              min={1}
+              max={604}
+              value={mushafPage}
+              onChange={(e) => setMushafPage(Number(e.target.value))}
+              className="w-full accent-gold-500 bg-stone-200 dark:bg-emerald-950/50 rounded-lg appearance-none h-1.5 cursor-pointer"
+            />
+            <span className="text-xs font-bold text-stone-500 dark:text-gold-400 font-serif">604</span>
+          </div>
+
+          {/* Scanned Image Main Container */}
+          <div className="relative w-full flex justify-center items-center overflow-auto rounded-2xl bg-[#EBE7D9] dark:bg-[#01140a] p-4 sm:p-8 border-4 border-gold-400/30 dark:border-gold-500/15 max-h-[1000px] shadow-lg group">
+            
+            {/* Desktop Quick Left/Right page-turn buttons */}
+            <button
+              onClick={handlePrevMushafPage}
+              disabled={mushafPage <= 1}
+              className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white/95 dark:bg-[#021c10]/95 hover:bg-gold-400 text-stone-900 shadow-xl rounded-full transition duration-300 opacity-0 group-hover:opacity-100 disabled:opacity-0 active:scale-90 flex items-center justify-center cursor-pointer border border-[#ddd3b0]/55 z-20"
+              title={isArabic ? 'الصفحة السابقة' : 'Previous page'}
+            >
+              <ChevronLeft className="w-6 h-6 text-emerald-900" />
+            </button>
+
+            <button
+              onClick={handleNextMushafPage}
+              disabled={mushafPage >= 604}
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white/95 dark:bg-[#021c10]/95 hover:bg-gold-400 text-stone-900 shadow-xl rounded-full transition duration-300 opacity-0 group-hover:opacity-100 disabled:opacity-0 active:scale-90 flex items-center justify-center cursor-pointer border border-[#ddd3b0]/55 z-20"
+              title={isArabic ? 'الصفحة التالية' : 'Next page'}
+            >
+              <ChevronRight className="w-6 h-6 text-emerald-900" />
+            </button>
+
+            {/* Centralized image itself */}
+            <div className="relative flex justify-center w-full transition-all duration-350" style={{ maxWidth: '100%' }}>
+              <img
+                src={`https://android.quran.com/data/zips/images_1920/width_1260/page${String(mushafPage).padStart(3, '0')}.png`}
+                alt={`سورة ${activeSurahDetail?.name_arabic || ''} - صفحة ${mushafPage}`}
+                className="shadow-3xl rounded-xl border border-stone-200/50 select-none duration-500 max-w-full"
+                referrerPolicy="no-referrer"
+                loading="eager"
+                style={{
+                  filter: invertMushaf ? 'invert(1) hue-rotate(180deg) brightness(0.95) contrast(1.1)' : 'none',
+                  width: `${zoomLevel}%`,
+                  maxWidth: '100%',
+                  height: 'auto',
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="text-center font-serif text-xs text-stone-400 py-2">
+            {isArabic 
+              ? 'تلميح: يمكنك استخدام أزرار الأسهم يميناً ويساراً في لوحة المفاتيح لتصفح الصفحات لمزيد من السهولة.' 
+              : 'Tip: You can use the left and right arrow keys on your keyboard to turn pages easily.'}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-col gap-4 relative">
         {/* Subtle page change top loading line */}
         {isLoading && verses.length > 0 && (
           <div className="absolute -top-3 left-0 right-0 h-1 bg-gold-400/25 overflow-hidden rounded-full z-10">
@@ -643,6 +949,8 @@ export default function SurahReading({
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
+      )}
+        </>
       )}
     </div>
   );

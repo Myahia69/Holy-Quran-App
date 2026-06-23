@@ -11,6 +11,7 @@ import AudioPlayer from './components/AudioPlayer';
 import SurahReading from './components/SurahReading';
 import TafsirDrawer from './components/TafsirDrawer';
 import SearchDialog from './components/SearchDialog';
+import SplashPage from './components/SplashPage';
 import { BookOpen, MapPin, Layers, Sparkles, HelpCircle, AlertCircle, RefreshCw, History } from 'lucide-react';
 
 export const JUZ_SURAH_MAP: Record<number, number[]> = {
@@ -63,6 +64,14 @@ export function getJuzsForSurah(surahId: number): number[] {
 
 export default function App() {
   // Global App States
+  const [showSplash, setShowSplash] = useState<boolean>(() => {
+    try {
+      const skip = localStorage.getItem('quran_splash_skip_always');
+      return skip !== 'true';
+    } catch {
+      return true;
+    }
+  });
   const [chaptersList, setChaptersList] = useState<Chapter[]>([]);
   const [sidebarTab, setSidebarTab] = useState<'all' | 'juz'>('all');
   const [selectedJuz, setSelectedJuz] = useState<number>(1);
@@ -344,6 +353,10 @@ export default function App() {
     sidebarTab === 'all'
       ? chaptersList
       : chaptersList.filter((ch) => JUZ_SURAH_MAP[selectedJuz]?.includes(ch.id));
+
+  if (showSplash) {
+    return <SplashPage onEnter={() => setShowSplash(false)} />;
+  }
 
   return (
     <div
