@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Sun, Moon, Search, Sliders, Type, BookOpen, Bookmark, Volume2, Sparkles } from 'lucide-react';
+import { Sun, Moon, Search, Sliders, Type, BookOpen, Bookmark, Volume2, Sparkles, Clock, CircleDot } from 'lucide-react';
 import { Chapter } from '../types';
 
 interface HeaderProps {
@@ -24,6 +24,8 @@ interface HeaderProps {
   onOpenDua?: () => void;
   mushafMode: boolean;
   onToggleMushaf: () => void;
+  onOpenPrayerTimes?: () => void;
+  onOpenTasbih?: () => void;
 }
 
 export default function Header({
@@ -42,6 +44,8 @@ export default function Header({
   onOpenDua,
   mushafMode,
   onToggleMushaf,
+  onOpenPrayerTimes,
+  onOpenTasbih,
 }: HeaderProps) {
   const isArabic = activeLanguage === 'ar';
 
@@ -122,6 +126,32 @@ export default function Header({
           <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
           <span className="text-[10px] md:text-xs font-bold leading-none hidden sm:inline">
             {isArabic ? 'الأدعية' : 'Duas'}
+          </span>
+        </button>
+
+        {/* Daily Prayer Times Trigger */}
+        <button
+          id="header-prayer-times-trigger"
+          onClick={onOpenPrayerTimes}
+          title={isArabic ? 'مواقيت الصلاة اليومية' : 'Daily Prayer Times'}
+          className="p-1.5 md:p-2 text-[#113f28] dark:text-gold-300 hover:text-gold-500 bg-emerald-500/5 hover:bg-gold-400/10 dark:bg-emerald-950/40 dark:hover:bg-gold-500/10 border border-gold-400/25 rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0"
+        >
+          <Clock className="w-4 h-4 text-emerald-600 dark:text-gold-400" />
+          <span className="text-[10px] md:text-xs font-bold leading-none hidden sm:inline font-serif">
+            {isArabic ? 'المواقيت' : 'Prayers'}
+          </span>
+        </button>
+
+        {/* Smart Tasbih Trigger */}
+        <button
+          id="header-tasbih-trigger"
+          onClick={onOpenTasbih}
+          title={isArabic ? 'السبحة الإلكترونية' : 'Smart Tasbih'}
+          className="p-1.5 md:p-2 text-[#113f28] dark:text-gold-300 hover:text-gold-500 bg-amber-500/5 hover:bg-gold-400/10 dark:bg-emerald-950/40 dark:hover:bg-gold-500/10 border border-gold-400/25 rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0"
+        >
+          <CircleDot className="w-4 h-4 text-amber-600 dark:text-gold-400 transition-transform duration-300 hover:rotate-90" />
+          <span className="text-[10px] md:text-xs font-bold leading-none hidden sm:inline font-serif">
+            {isArabic ? 'السبحة' : 'Tasbih'}
           </span>
         </button>
 

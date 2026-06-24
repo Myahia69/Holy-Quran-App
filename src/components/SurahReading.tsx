@@ -115,6 +115,16 @@ export default function SurahReading({
     }
   });
 
+  const [syncWithAudio, setSyncWithAudio] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('quran_mushaf_sync_audio');
+      // Default to false so reading is completely decoupled from the audio playback as requested by the user
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
+
   const [zoomLevel, setZoomLevel] = useState<number>(100);
 
   const [extraSharp, setExtraSharp] = useState<boolean>(() => {
@@ -206,6 +216,12 @@ export default function SurahReading({
     } catch {}
   }, [extraSharp]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('quran_mushaf_sync_audio', String(syncWithAudio));
+    } catch {}
+  }, [syncWithAudio]);
+
   // Sync Mushaf Page when Surah changes from parent select
   useEffect(() => {
     const sPage = SURAH_START_PAGES[activeSurah] || 1;
@@ -246,7 +262,7 @@ export default function SurahReading({
 
   // Sync Mushaf Page with Active Verse key during global recitation/audio playing
   useEffect(() => {
-    if (mushafMode && activeVerseKey) {
+    if (syncWithAudio && mushafMode && activeVerseKey) {
       const isAlreadyOnPage = mushafPageVerses.some(v => v.verse_key === activeVerseKey);
       if (!isAlreadyOnPage) {
         const [sKey, vKey] = activeVerseKey.split(':');
@@ -267,7 +283,7 @@ export default function SurahReading({
         }
       }
     }
-  }, [activeVerseKey, mushafMode, verses, mushafPageVerses]);
+  }, [activeVerseKey, mushafMode, verses, mushafPageVerses, syncWithAudio]);
 
   // Key Down listeners for Left/Right arrows in Mushaf View
   useEffect(() => {
@@ -539,25 +555,38 @@ export default function SurahReading({
             </div>
 
             {/* Right: Night filter / zoom options */}
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 md:gap-3 justify-end">
               {/* Zoom controls */}
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 bg-stone-50 dark:bg-emerald-950/20 border border-gold-400/15 rounded-xl px-1.5 py-0.5">
                 <button
                   onClick={() => setZoomLevel((prev) => Math.max(prev - 10, 50))}
-                  className="p-2 rounded-lg hover:bg-stone-50 dark:hover:bg-emerald-950/20 text-stone-500 dark:text-gold-300 transition"
+                  className="p-1.5 rounded-lg hover:bg-stone-200 dark:hover:bg-emerald-950/40 text-stone-500 dark:text-gold-300 transition"
                   title={isArabic ? 'تصغير' : 'Zoom Out'}
                 >
                   <span className="text-xs font-black">-</span>
                 </button>
-                <span className="text-xs font-mono font-bold text-stone-500 dark:text-gold-400">{zoomLevel}%</span>
+                <span className="text-xs font-mono font-bold text-stone-500 dark:text-gold-400 px-1">{zoomLevel}%</span>
                 <button
                   onClick={() => setZoomLevel((prev) => Math.min(prev + 10, 200))}
-                  className="p-2 rounded-lg hover:bg-stone-50 dark:hover:bg-emerald-950/20 text-stone-500 dark:text-gold-300 transition"
+                  className="p-1.5 rounded-lg hover:bg-stone-200 dark:hover:bg-emerald-950/40 text-stone-500 dark:text-gold-300 transition"
                   title={isArabic ? 'تكبير' : 'Zoom In'}
                 >
                   <span className="text-xs font-black">+</span>
                 </button>
               </div>
+
+              {/* Sync with Audio Toggle */}
+              <button
+                onClick={() => setSyncWithAudio(!syncWithAudio)}
+                className={`p-2 rounded-xl border transition cursor-pointer flex items-center justify-center gap-1.5 text-xs font-serif font-black ${
+                  syncWithAudio
+                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-extrabold shadow-sm'
+                    : 'bg-stone-50 border-stone-200 dark:bg-emerald-950/30 dark:border-gold-400/10 text-stone-500 dark:text-gold-400 hover:bg-stone-100'
+                }`}
+                title={isArabic ? 'ربط صفحة المصحف تلقائياً مع تلاوة الآية الحالية' : 'Synchronize Mushaf page with currently reciting verse'}
+              >
+                <span>{isArabic ? (syncWithAudio ? 'ربط بالصوت 🔄' : 'مفصول عن الصوت 📴') : (syncWithAudio ? 'Sync Page 🔄' : 'Unsynced 📴')}</span>
+              </button>
 
               {/* Night Mode Toggle for Scans */}
               <button

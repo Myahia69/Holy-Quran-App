@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { fetchChapters } from './services/quranApi';
 import { Chapter } from './types';
 import HeaderComponent from './components/Header';
@@ -13,8 +13,11 @@ import TafsirDrawer from './components/TafsirDrawer';
 import SearchDialog from './components/SearchDialog';
 import SplashPage from './components/SplashPage';
 import DuaSidebarSection from './components/DuaSidebarSection';
+import PrayerTimesDialog from './components/PrayerTimesDialog';
+import TasbihDialog from './components/TasbihDialog';
+import DailyContemplationCard from './components/DailyContemplationCard';
 import { motion, AnimatePresence } from 'motion/react';
-import { BookOpen, MapPin, Layers, Sparkles, HelpCircle, AlertCircle, RefreshCw, History, X } from 'lucide-react';
+import { BookOpen, MapPin, Layers, Sparkles, HelpCircle, AlertCircle, RefreshCw, History, X, Volume2 } from 'lucide-react';
 
 export const JUZ_SURAH_MAP: Record<number, number[]> = {
   1: [1, 2],
@@ -127,6 +130,138 @@ export default function App() {
   const [tafsirVerseKey, setTafsirVerseKey] = useState<string>('');
   const [tafsirVerseText, setTafsirVerseText] = useState<string>('');
   const [isDuaDrawerOpen, setIsDuaDrawerOpen] = useState<boolean>(false);
+  const [isPrayerTimesOpen, setIsPrayerTimesOpen] = useState<boolean>(false);
+  const [isTasbihOpen, setIsTasbihOpen] = useState<boolean>(false);
+
+  // Background Adhan Alerts Tracking
+  const [activeAdhanAlert, setActiveAdhanAlert] = useState<{
+    nameAr: string;
+    nameEn: string;
+    key: string;
+  } | null>(null);
+
+  const adhanAudioInstanceRef = useRef<HTMLAudioElement | null>(null);
+  const lastTriggeredAdhanRef = useRef<string>("");
+
+  const muteAdhanAlarm = () => {
+    if (adhanAudioInstanceRef.current) {
+      adhanAudioInstanceRef.current.pause();
+      adhanAudioInstanceRef.current = null;
+    }
+    setActiveAdhanAlert(null);
+  };
+
+  // Background Prayer Times Alarm / Adhan Checker
+  useEffect(() => {
+    const parsePrayerTimeToHM = (timeStr: string) => {
+      if (!timeStr) return null;
+      const clean = timeStr.trim().toUpperCase();
+      const match = clean.match(/(\d+):(\d+)\s*(AM|PM)?/);
+      if (!match) return null;
+      let hours = parseInt(match[1]);
+      const minutes = parseInt(match[2]);
+      const ampm = match[3];
+      if (ampm === "PM" && hours < 12) hours += 12;
+      if (ampm === "AM" && hours === 12) hours = 0;
+      return { hours, minutes };
+    };
+
+    const checkAlarms = () => {
+      try {
+        const alertsEnabled = localStorage.getItem("quran_adhan_alerts_enabled") !== "false";
+        if (!alertsEnabled) return;
+
+        const cachedRaw = localStorage.getItem("quran_cached_prayer_times");
+        if (!cachedRaw) return;
+
+        const parsedTimes = JSON.parse(cachedRaw);
+        if (!parsedTimes || !parsedTimes.prayerTimes) return;
+
+        const times = parsedTimes.prayerTimes;
+        const now = new Date();
+        const currentDay = now.getDate();
+        const currentHours = now.getHours();
+        const currentMinutes = now.getMinutes();
+
+        // Fajr, Dhuhr, Asr, Maghrib, Isha
+        const prayersToTrack = [
+          { key: "fajr", ar: "الفجر", en: "Fajr" },
+          { key: "dhuhr", ar: "الظهر", en: "Dhuhr" },
+          { key: "asr", ar: "العصر", en: "Asr" },
+          { key: "maghrib", ar: "المغرب", en: "Maghrib" },
+          { key: "isha", ar: "العشاء", en: "Isha" },
+        ];
+
+        for (const prayer of prayersToTrack) {
+          const prayerTimeStr = times[prayer.key];
+          if (!prayerTimeStr) continue;
+
+          const hm = parsePrayerTimeToHM(prayerTimeStr);
+          if (!hm) continue;
+
+          if (currentHours === hm.hours && currentMinutes === hm.minutes) {
+            const triggerKey = `${prayer.key}-${currentDay}-${currentHours}-${currentMinutes}`;
+            if (lastTriggeredAdhanRef.current !== triggerKey) {
+              lastTriggeredAdhanRef.current = triggerKey;
+              
+              // Pause Quran playback if active to prevent overlapping sounds
+              setIsPlaying(false);
+
+              // Play Adhan Alarm!
+              triggerAdhanAlarm(prayer.ar, prayer.en, triggerKey);
+              break;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Background prayer check error:", err);
+      }
+    };
+
+    const triggerAdhanAlarm = (nameAr: string, nameEn: string, key: string) => {
+      try {
+        if (adhanAudioInstanceRef.current) {
+          adhanAudioInstanceRef.current.pause();
+        }
+
+        const soundUrl = localStorage.getItem("quran_adhan_sound_url") || "https://www.islamcan.com/audio/adhan/azan2.mp3";
+        const alertType = localStorage.getItem("quran_adhan_alert_type") || "takbeer";
+
+        const audio = new Audio(soundUrl);
+        audio.volume = 0.95;
+
+        if (alertType === "takbeer") {
+          audio.addEventListener("timeupdate", () => {
+            if (audio.currentTime > 18) {
+              audio.pause();
+              setActiveAdhanAlert(null);
+            }
+          });
+        }
+
+        audio.addEventListener("ended", () => {
+          setActiveAdhanAlert(null);
+        });
+
+        adhanAudioInstanceRef.current = audio;
+        audio.play().catch(e => {
+          console.warn("Browser blocked autoplay. Interactive user click is required before sound triggers.");
+        });
+
+        setActiveAdhanAlert({ nameAr, nameEn, key });
+      } catch (err) {
+        console.error("Failed to trigger Adhan alarm:", err);
+      }
+    };
+
+    // Run clock alignment checking every 12 seconds
+    const interval = setInterval(checkAlarms, 12000);
+    checkAlarms();
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
 
   // App Initializers & Fallbacks
   const [isChapterLoading, setIsChapterLoading] = useState<boolean>(true);
@@ -274,6 +409,29 @@ export default function App() {
     }
   }, [theme]);
 
+  // Keyboard shortcut listener for toggling mushaf mode with the 'm' key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Avoid toggling when typing in search fields or input elements
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA' ||
+        document.activeElement?.getAttribute('contenteditable') === 'true'
+      ) {
+        return;
+      }
+
+      if (e.key === 'm' || e.key === 'M') {
+        setMushafMode((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   // 4. Fetch the full Chapters indexing list on change of language
   useEffect(() => {
     let isMounted = true;
@@ -405,6 +563,8 @@ export default function App() {
         onOpenDua={() => setIsDuaDrawerOpen(true)}
         mushafMode={mushafMode}
         onToggleMushaf={() => setMushafMode((m) => !m)}
+        onOpenPrayerTimes={() => setIsPrayerTimesOpen(true)}
+        onOpenTasbih={() => setIsTasbihOpen(true)}
       />
 
       {/* 2. Primary layout dashboard */}
@@ -628,6 +788,12 @@ export default function App() {
 
         {/* Center column (Main presentation platform) */}
         <main className="flex-1 px-4 sm:px-6 md:px-10 py-6 md:py-8 overflow-hidden min-w-0" id="main-presentation-platform">
+          {/* Daily Contemplation Card */}
+          <DailyContemplationCard
+            isArabic={isArabic}
+            onNavigateToVerse={handleNavigateToDuaVerse}
+          />
+
           {/* Header metadata label */}
           {activeSurahDetail && (
             <div className="mb-8 p-7 rounded-3xl bg-gradient-to-r from-emerald-950 to-[#0c331f] dark:from-[#021810] dark:to-[#093521] border-2 border-gold-400 shadow-lg text-white flex flex-col md:flex-row md:items-center justify-between gap-5 relative overflow-hidden islamic-glow" id="active-surah-jumbotron">
@@ -729,6 +895,18 @@ export default function App() {
         onSelectResult={handleSelectSearchResult}
       />
 
+      <PrayerTimesDialog
+        isOpen={isPrayerTimesOpen}
+        onClose={() => setIsPrayerTimesOpen(false)}
+        isArabic={isArabic}
+      />
+
+      <TasbihDialog
+        isOpen={isTasbihOpen}
+        onClose={() => setIsTasbihOpen(false)}
+        isArabic={isArabic}
+      />
+
       <TafsirDrawer
         isOpen={tafsirDrawerOpen}
         onClose={() => setTafsirDrawerOpen(false)}
@@ -791,6 +969,47 @@ export default function App() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Dynamic Adhan Prayer Alert Floating Banner */}
+      <AnimatePresence>
+        {activeAdhanAlert && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-md bg-[#faf7ef] dark:bg-[#021810] border-2 border-gold-400 rounded-2xl shadow-2xl p-4 flex items-center justify-between gap-4 text-stone-800 dark:text-gold-100"
+            dir="rtl"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-950/40 dark:bg-emerald-900/40 border border-gold-400/30 flex items-center justify-center text-gold-400 shrink-0">
+                <Volume2 className="w-5 h-5 animate-bounce" />
+              </div>
+              <div>
+                <h4 className="font-serif font-black text-sm text-[#113f28] dark:text-gold-250 leading-tight">
+                  {isArabic ? `حان الآن موعد أذان صلاة ${activeAdhanAlert.nameAr}` : `It is now time for ${activeAdhanAlert.nameEn} prayer`}
+                </h4>
+                <p className="text-[10px] text-stone-500 dark:text-gold-400/60 font-serif mt-0.5">
+                  {isArabic ? "«أَقِمِ الصَّلَاةَ لِدُلُوكِ الشَّمْسِ»" : "“Establish prayer at the decline of the sun”"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={muteAdhanAlarm}
+                className="px-3 py-1.5 bg-[#113f28] hover:bg-emerald-900 text-gold-250 text-xs font-bold rounded-xl border border-gold-400/20 transition cursor-pointer shrink-0"
+              >
+                {isArabic ? "كتم الأذان" : "Mute"}
+              </button>
+              <button
+                onClick={() => setActiveAdhanAlert(null)}
+                className="p-1 rounded-lg hover:bg-stone-200 dark:hover:bg-emerald-950/50 text-stone-400 hover:text-stone-600 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
