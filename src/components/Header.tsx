@@ -70,12 +70,15 @@ export default function Header({
           <div className="absolute inset-0.5 rounded-full border border-gold-200/30" />
           <span className="relative -top-[1px]">ق</span>
         </div>
-        <div className="hidden md:block">
-          <h1 className="text-sm font-cinzel font-bold text-[#113f28] dark:text-gold-300 tracking-widest leading-none mb-1">
+        <div className="flex flex-col">
+          <h1 className="text-xs sm:text-sm font-cinzel font-bold text-emerald-900 dark:text-gold-300 tracking-wider sm:tracking-widest leading-none mb-0.5">
             {isArabic ? 'بوابة القرآن الكريم' : 'AL-QURAN GLOBAL'}
           </h1>
-          <p className="text-[10px] text-[#b4923e] dark:text-gold-450/80 font-serif italic">
-            {isArabic ? 'تلاوات، ترجمة، تفسير ومطالعة الذكر الحكيم' : 'Noble Recitations, Commentary, & Commentary'}
+          <p className="text-[9px] sm:text-[10px] text-amber-600 dark:text-gold-400/80 font-serif italic leading-none hidden sm:block">
+            {isArabic ? 'تلاوات، ترجمة، تفسير ومطالعة الذكر الحكيم' : 'Noble Recitations & Commentary'}
+          </p>
+          <p className="text-[8px] sm:text-[9.5px] text-emerald-800/80 dark:text-gold-400/90 font-serif font-black leading-none mt-1">
+            {isArabic ? 'تطوير: محمد يحيي محمد صبيح' : 'Dev: Mohamed Yahya'}
           </p>
         </div>
       </div>

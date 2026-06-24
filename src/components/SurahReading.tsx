@@ -1000,13 +1000,13 @@ export default function SurahReading({
                   ) : tafsirs[verse.verse_key] ? (
                     <div className="bg-[#FAF7F0] dark:bg-[#031d10]/45 p-4 rounded-2xl border-r-4 border-gold-400/80 shadow-[inset_0_2px_8px_rgba(0,0,0,0.02)] border border-l-gold-400/5 duration-300">
                       <p 
-                        className="font-sans leading-[1.8] text-stone-850 dark:text-[#ccf2e2]/95 text-right font-medium text-xs sm:text-sm"
+                        className="font-sans leading-[1.8] text-stone-800 dark:text-[#ccf2e2]/95 text-right font-medium text-xs sm:text-sm"
                         style={{ fontSize: `${13.5 * textScale}px` }}
                         dangerouslySetInnerHTML={{ __html: tafsirs[verse.verse_key] }}
                       />
                     </div>
                   ) : (
-                    <div className="bg-[#FAF7F0] dark:bg-emerald-950/10 p-3.5 rounded-2xl border-2 border-dashed border-gold-400/10 text-center text-xs text-stone-400/80 italic">
+                    <div className="bg-[#FAF7F0] dark:bg-emerald-950/20 p-3.5 rounded-2xl border-2 border-dashed border-gold-400/10 text-center text-xs text-stone-500 dark:text-gold-400/60 italic">
                       {isArabic ? 'التفسير غير متوفر في كتاب التفسير المحدد حالياً لهذه الآية.' : 'Interpretation data unavailable.'}
                     </div>
                   )}
@@ -1016,7 +1016,7 @@ export default function SurahReading({
             })}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center p-16 text-stone-400 bg-white dark:bg-neutral-905 border border-neutral-100 dark:border-neutral-800 rounded-2xl">
+          <div className="flex flex-col items-center justify-center p-16 text-stone-500 dark:text-gold-400/60 bg-white dark:bg-[#032014]/40 border border-neutral-100 dark:border-emerald-900/20 rounded-2xl">
             <HelpCircle className="w-12 h-12 stroke-[1] mb-2 text-gold-400" />
             <span>{isArabic ? 'لم نتمكن من جلب الآيات الكريمة حالياً.' : 'Verses could not be fetched.'}</span>
           </div>

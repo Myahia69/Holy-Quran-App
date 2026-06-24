@@ -163,7 +163,7 @@ export default function SearchDialog({
                   {/* Standard Arabic Text highlight */}
                   <div className="text-right w-full" style={{ direction: 'rtl' }}>
                     <p
-                      className="font-scheherazade text-[#062416] dark:text-stone-100 text-[#062416] text-lg md:text-xl leading-loose"
+                      className="font-scheherazade text-emerald-950 dark:text-stone-100 text-lg md:text-xl leading-loose"
                       dangerouslySetInnerHTML={{ __html: item.text }}
                     />
                   </div>

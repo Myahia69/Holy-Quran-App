@@ -863,6 +863,27 @@ export default function App() {
             mushafMode={mushafMode}
             onToggleMushaf={() => setMushafMode((m) => !m)}
           />
+
+          {/* Footer Attribution Section */}
+          <footer className="mt-16 pt-8 pb-12 border-t border-gold-400/10 text-center relative z-10" id="site-footer-credits">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <div className="h-[1px] w-12 bg-gradient-to-r from-transparent to-gold-400/40" />
+              <div className="text-gold-400 text-xs">❈</div>
+              <div className="h-[1px] w-12 bg-gradient-to-l from-transparent to-gold-400/40" />
+            </div>
+            
+            <p className="font-serif font-black text-emerald-900 dark:text-gold-300 text-sm md:text-base tracking-wide leading-relaxed">
+              {isArabic 
+                ? "تم عمل هذا الموقع بواسطة محمد يحيي محمد صبيح" 
+                : "This website was developed by Mohamed Yahya Mohamed Sabeeh"}
+            </p>
+            
+            <p className="text-[10px] text-stone-500 dark:text-gold-400/60 font-mono mt-1">
+              {isArabic 
+                ? "«وَمَا تَوْفِيقِي إِلَّا بِاللَّهِ ۚ عَلَيْهِ تَوَكَّلْتُ وَإِلَيْهِ أُنِيبُ»" 
+                : "“And my success is not but through Allah. Upon him I have relied, and to Him I return.”"}
+            </p>
+          </footer>
         </main>
       </div>
 
@@ -1012,6 +1033,19 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Persistent Floating Developer Attribution Badge */}
+      <div 
+        className="fixed bottom-28 md:bottom-24 left-4 z-40 flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/90 border-2 border-emerald-800 dark:border-gold-400 text-emerald-900 dark:text-gold-300 text-xs font-serif font-black shadow-2xl transition hover:scale-[1.03] duration-300"
+        id="floating-developer-badge"
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-amber-500 animate-pulse shrink-0" />
+        <span>
+          {isArabic 
+            ? "تطوير: محمد يحيي محمد صبيح" 
+            : "Dev: Mohamed Yahya"}
+        </span>
+      </div>
     </div>
   );
 }

@@ -198,7 +198,7 @@ export default function TafsirDrawer({
               ) : tafsirData ? (
                 <div className="prose dark:prose-invert max-w-none">
                   <div
-                    className={`leading-[2] text-stone-850 dark:text-stone-150 ${
+                    className={`leading-[2] text-stone-800 dark:text-stone-200 ${
                       isTafsirRtl ? 'text-right font-scheherazade font-medium' : 'text-left font-sans font-normal'
                     }`}
                     style={{

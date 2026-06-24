@@ -153,8 +153,8 @@ export default function SplashPage({ onEnter }: SplashPageProps) {
       </div>
 
       {/* Decorative Traditional Footnote Ornament spacing */}
-      <div className="absolute bottom-6 text-center text-[10px] text-stone-500/80 font-mono tracking-widest max-w-xs px-4 pointer-events-none">
-        تلاوت، تدبر وتفسير القرآن الكريم - ١٤٤٧ هـ
+      <div className="absolute bottom-6 text-center text-xs text-gold-400/70 font-serif flex flex-col items-center gap-1.5 max-w-sm px-4 pointer-events-none">
+        <span>تلاوة، تدبر وتفسير القرآن الكريم - ١٤٤٧ هـ</span>
       </div>
 
       {/* Tailwind & CSS Custom Animations for spin-slow */}
