@@ -14,7 +14,10 @@ import {
   VolumeX, 
   Navigation,
   Play,
-  Square
+  Square,
+  Calendar,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 
 interface PrayerTimesDialogProps {
@@ -40,10 +43,255 @@ interface PrayerData {
   sources?: Array<{ title: string; url: string }>;
 }
 
-type DialogTab = "times" | "qibla" | "alerts";
+function getHijriFallback(gregorianDate: Date) {
+  const m = gregorianDate.getMonth() + 1;
+  const d = gregorianDate.getDate();
+  let y = gregorianDate.getFullYear();
+  
+  if (m < 3) {
+    y -= 1;
+  }
+  
+  const a = Math.floor(y / 100);
+  const b = Math.floor(a / 4);
+  const c = 2 - a + b;
+  const e = Math.floor(365.25 * (y + 4716));
+  const f = Math.floor(30.6001 * (m + 1));
+  const jd = c + d + e + f - 1524.5;
+  
+  const epoch = 1948439.5;
+  const cycle = 10631;
+  const yearLength = 354.36667;
+  
+  const shift = jd - epoch + 0.5;
+  const cycleCount = Math.floor(shift / cycle);
+  const rem = shift % cycle;
+  
+  let hijriYear = Math.floor(cycleCount * 30 + rem / yearLength) + 1;
+  const cycleStartJD = cycleCount * cycle + epoch - 0.5;
+  
+  let yearJD = cycleStartJD;
+  const leapYears = [2, 5, 7, 10, 13, 16, 18, 21, 24, 26, 29];
+  
+  const isLeap = (yr: number) => {
+    const r = (yr - 1) % 30;
+    return leapYears.includes(r);
+  };
+  
+  let currentY = 1;
+  while (currentY < (hijriYear - cycleCount * 30)) {
+    const yr = cycleCount * 30 + currentY;
+    yearJD += isLeap(yr) ? 355 : 354;
+    currentY++;
+  }
+  
+  let daysInYear = Math.floor(jd - yearJD) + 1;
+  if (daysInYear < 0) {
+    hijriYear--;
+    let lastYrJD = cycleStartJD;
+    let tempY = 1;
+    while (tempY < (hijriYear - cycleCount * 30)) {
+      lastYrJD += isLeap(cycleCount * 30 + tempY) ? 355 : 354;
+      tempY++;
+    }
+    daysInYear = Math.floor(jd - lastYrJD) + 1;
+  }
+  
+  const monthsLength = [30, 29, 30, 29, 30, 29, 30, 29, 30, 29, 30, 29];
+  if (isLeap(hijriYear)) {
+    monthsLength[11] = 30;
+  }
+  
+  let hijriMonth = 1;
+  let accumDays = 0;
+  for (let i = 0; i < 12; i++) {
+    const mLen = monthsLength[i];
+    if (daysInYear <= accumDays + mLen) {
+      hijriMonth = i + 1;
+      break;
+    }
+    accumDays += mLen;
+  }
+  
+  const hijriDay = daysInYear - accumDays;
+  
+  const monthNamesAr = [
+    "محرم", "صفر", "ربيع الأول", "ربيع الآخر", "جمادى الأولى", "جمادى الآخرة",
+    "رجب", "شعبان", "رمضان", "شوال", "ذو القعدة", "ذو الحجة"
+  ];
+  const monthNamesEn = [
+    "Muharram", "Safar", "Rabi' al-Awwal", "Rabi' al-Thani", "Jumada al-Awwal", "Jumada al-Thani",
+    "Rajab", "Sha'ban", "Ramadan", "Shawwal", "Dhu al-Qadah", "Dhu al-Hijjah"
+  ];
+  
+  return {
+    day: hijriDay,
+    month: hijriMonth,
+    year: hijriYear,
+    monthEn: monthNamesEn[hijriMonth - 1],
+    monthAr: monthNamesAr[hijriMonth - 1],
+    formattedAr: `${hijriDay} ${monthNamesAr[hijriMonth - 1]} ${hijriYear} هـ`
+  };
+}
+
+function getHijriDayInfo(gregorianDate: Date) {
+  try {
+    const formatterParts = new Intl.DateTimeFormat('en-US-u-ca-islamic-umalqura', {
+      day: 'numeric',
+      month: 'numeric',
+      year: 'numeric'
+    });
+    const parts = formatterParts.formatToParts(gregorianDate);
+    const dayStr = parts.find(p => p.type === 'day')?.value;
+    const monthStr = parts.find(p => p.type === 'month')?.value;
+    const yearStr = parts.find(p => p.type === 'year')?.value;
+    
+    if (!dayStr || !monthStr || !yearStr) {
+      throw new Error("Failed to parse parts");
+    }
+    
+    const day = parseInt(dayStr, 10);
+    const month = parseInt(monthStr, 10);
+    const year = parseInt(yearStr, 10);
+    
+    const formatterMonthEn = new Intl.DateTimeFormat('en-US-u-ca-islamic-umalqura', { month: 'long' });
+    const formatterMonthAr = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { month: 'long' });
+    
+    const monthEn = formatterMonthEn.format(gregorianDate);
+    const monthAr = formatterMonthAr.format(gregorianDate);
+    
+    return {
+      day,
+      month,
+      year,
+      monthEn,
+      monthAr,
+      formattedAr: `${day} ${monthAr} ${year} هـ`
+    };
+  } catch (e) {
+    return getHijriFallback(gregorianDate);
+  }
+}
+
+interface IslamicOccasion {
+  ar: string;
+  en: string;
+  isHoliday: boolean;
+}
+
+function getIslamicOccasion(hijriDay: number, hijriMonth: number): IslamicOccasion | null {
+  if (hijriMonth === 1 && hijriDay === 1) {
+    return {
+      ar: "رأس السنة الهجرية 🆕",
+      en: "Islamic New Year 🆕",
+      isHoliday: true
+    };
+  }
+  if (hijriMonth === 1 && hijriDay === 10) {
+    return {
+      ar: "يوم عاشوراء 🌾",
+      en: "Day of Ashura 🌾",
+      isHoliday: false
+    };
+  }
+  if (hijriMonth === 3 && hijriDay === 12) {
+    return {
+      ar: "المولد النبوي الشريف 🌸",
+      en: "Prophet's Birthday (Mawlid) 🌸",
+      isHoliday: true
+    };
+  }
+  if (hijriMonth === 7 && hijriDay === 27) {
+    return {
+      ar: "ذكرى الإسراء والمعراج ✨",
+      en: "Isra' and Mi'raj ✨",
+      isHoliday: false
+    };
+  }
+  if (hijriMonth === 8 && hijriDay === 15) {
+    return {
+      ar: "ليلة النصف من شعبان 🌙",
+      en: "Mid-Sha'ban Night 🌙",
+      isHoliday: false
+    };
+  }
+  if (hijriMonth === 9) {
+    if (hijriDay === 1) {
+      return {
+        ar: "أول أيام شهر رمضان المبارك 🌙✨",
+        en: "First Day of Holy Ramadan 🌙✨",
+        isHoliday: true
+      };
+    }
+    if (hijriDay === 27) {
+      return {
+        ar: "ليلة القدر (ليلة ٢٧ رمضان) 🌌🕌",
+        en: "Laylat al-Qadr (27th Night) 🌌🕌",
+        isHoliday: false
+      };
+    }
+    return {
+      ar: `رمضان المبارك (اليوم ${hijriDay}) 🕌`,
+      en: `Ramadan (Day ${hijriDay}) 🕌`,
+      isHoliday: false
+    };
+  }
+  if (hijriMonth === 10) {
+    if (hijriDay >= 1 && hijriDay <= 3) {
+      return {
+        ar: "عيد الفطر المبارك 🎉🎈",
+        en: "Eid al-Fitr Holiday 🎉🎈",
+        isHoliday: true
+      };
+    }
+  }
+  if (hijriMonth === 12) {
+    if (hijriDay === 1) {
+      return {
+        ar: "بداية ذي الحجة (عشر ذي الحجة) 🕋",
+        en: "First of Dhu al-Hijjah (Blessed 10 Days) 🕋",
+        isHoliday: false
+      };
+    }
+    if (hijriDay === 9) {
+      return {
+        ar: "يوم عرفة (وقفة عرفات) 🏔️🤲",
+        en: "Day of Arafah (Hajj Apex) 🏔️🤲",
+        isHoliday: true
+      };
+    }
+    if (hijriDay >= 10 && hijriDay <= 12) {
+      return {
+        ar: `عيد الأضحى المبارك (اليوم ${hijriDay - 9}) 🐑🎁`,
+        en: `Eid al-Adha Holiday (Day ${hijriDay - 9}) 🐑🎁`,
+        isHoliday: true
+      };
+    }
+    if (hijriDay === 13) {
+      return {
+        ar: "آخر أيام التشريق (عيد الأضحى) 🕋",
+        en: "Last Day of Tashreeq (Eid al-Adha) 🕋",
+        isHoliday: true
+      };
+    }
+  }
+  return null;
+}
+
+type DialogTab = "times" | "calendar" | "qibla" | "alerts";
 
 export default function PrayerTimesDialog({ isOpen, onClose, isArabic }: PrayerTimesDialogProps) {
   const [activeTab, setActiveTab] = useState<DialogTab>("times");
+  const [currentCalendarDate, setCurrentCalendarDate] = useState<Date>(new Date());
+  
+  const handlePrevMonth = () => {
+    setCurrentCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
   const [locationInput, setLocationInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [detectingLocation, setDetectingLocation] = useState(false);
@@ -608,6 +856,7 @@ export default function PrayerTimesDialog({ isOpen, onClose, isArabic }: PrayerT
             <div className="px-6 pt-3 flex gap-1 border-b border-gold-400/10 relative z-10">
               {[
                 { id: "times", ar: "مواقيت الصلاة", en: "Prayer Times", icon: Clock },
+                { id: "calendar", ar: "التقويم الهجري", en: "Islamic Calendar", icon: Calendar },
                 { id: "qibla", ar: "بوصلة القبلة", en: "Qibla Compass", icon: Navigation },
                 { id: "alerts", ar: "تنبيه الأذان", en: "Adhan Alerts", icon: Volume2 },
               ].map((tab) => {
@@ -620,14 +869,14 @@ export default function PrayerTimesDialog({ isOpen, onClose, isArabic }: PrayerT
                       setActiveTab(tab.id as DialogTab);
                       stopTestAudio();
                     }}
-                    className={`flex-1 py-2 px-1 text-xs font-bold rounded-t-xl transition-all border-t-2 border-x border-transparent flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`flex-1 py-2 px-1 text-[11px] sm:text-xs font-bold rounded-t-xl transition-all border-t-2 border-x border-transparent flex items-center justify-center gap-1 cursor-pointer ${
                       isActive
                         ? "bg-white dark:bg-[#032014] text-emerald-950 dark:text-gold-250 border-t-gold-400 border-x-gold-400/10 font-black shadow-[0_-2px_6px_rgba(0,0,0,0.03)]"
                         : "text-stone-500 dark:text-gold-400/60 hover:text-emerald-950 dark:hover:text-gold-200"
                     }`}
                   >
-                    <Icon className={`w-3.5 h-3.5 ${isActive ? "text-gold-400" : ""}`} />
-                    <span>{isArabic ? tab.ar : tab.en}</span>
+                    <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-gold-400" : ""}`} />
+                    <span className="truncate">{isArabic ? tab.ar : tab.en}</span>
                   </button>
                 );
               })}
@@ -813,6 +1062,182 @@ export default function PrayerTimesDialog({ isOpen, onClose, isArabic }: PrayerT
                   )}
                 </div>
               )}
+
+              {/* Tab: ISLAMIC HIJRI CALENDAR */}
+              {activeTab === "calendar" && (() => {
+                const calendarYear = currentCalendarDate.getFullYear();
+                const calendarMonth = currentCalendarDate.getMonth();
+                const firstDayOfMonth = new Date(calendarYear, calendarMonth, 1);
+                const startDayOfWeek = firstDayOfMonth.getDay();
+                const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+
+                const calendarDaysList = [];
+                for (let i = 0; i < startDayOfWeek; i++) {
+                  calendarDaysList.push(null);
+                }
+
+                for (let day = 1; day <= daysInMonth; day++) {
+                  const d = new Date(calendarYear, calendarMonth, day);
+                  const hijriInfo = getHijriDayInfo(d);
+                  const occasion = getIslamicOccasion(hijriInfo.day, hijriInfo.month);
+                  const isToday = new Date().toDateString() === d.toDateString();
+                  calendarDaysList.push({
+                    date: d,
+                    dayNum: day,
+                    hijri: hijriInfo,
+                    occasion,
+                    isToday
+                  });
+                }
+
+                const firstDayHijri = getHijriDayInfo(new Date(calendarYear, calendarMonth, 1));
+                const lastDayHijri = getHijriDayInfo(new Date(calendarYear, calendarMonth, daysInMonth));
+                
+                const hijriMonthHeader = firstDayHijri.month === lastDayHijri.month
+                  ? (isArabic ? `${firstDayHijri.monthAr} ${firstDayHijri.year} هـ` : `${firstDayHijri.monthEn} ${firstDayHijri.year} AH`)
+                  : (isArabic 
+                      ? `${firstDayHijri.monthAr} / ${lastDayHijri.monthAr} ${lastDayHijri.year} هـ` 
+                      : `${firstDayHijri.monthEn} / ${lastDayHijri.monthEn} ${lastDayHijri.year} AH`);
+                      
+                const gregorianMonthHeader = currentCalendarDate.toLocaleDateString(isArabic ? 'ar-EG' : 'en-US', {
+                  month: 'long',
+                  year: 'numeric'
+                });
+
+                const holidaysInMonth = calendarDaysList
+                  .filter((d): d is NonNullable<typeof d> => d !== null && d.occasion !== null)
+                  .map(d => ({
+                    gregorianDate: d.date,
+                    hijri: d.hijri,
+                    occasion: d.occasion
+                  }));
+
+                const weekDays = isArabic
+                  ? ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"]
+                  : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+                return (
+                  <div className="space-y-4 animate-fade-in" id="islamic-calendar-tab-content">
+                    {/* Calendar Month Header & Switcher */}
+                    <div className="flex items-center justify-between p-4 rounded-2xl bg-gradient-to-br from-emerald-950 to-[#0a2f1c] dark:from-[#032517] dark:to-[#021810] border border-gold-400/45 text-white shadow-md relative overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={handlePrevMonth}
+                        className="p-1.5 rounded-xl hover:bg-white/10 text-gold-300 border border-gold-400/20 hover:border-gold-400/50 transition cursor-pointer"
+                        title={isArabic ? "الشهر السابق" : "Previous Month"}
+                      >
+                        <ChevronLeft className="w-5 h-5 rtl:rotate-180" />
+                      </button>
+
+                      <div className="text-center relative z-10 select-none">
+                        <div className="text-[10px] text-gold-400 font-bold tracking-wider uppercase mb-0.5">
+                          {isArabic ? "التقويم الهجري والميلادي" : "Hijri & Gregorian Calendar"}
+                        </div>
+                        <h4 className="text-sm sm:text-base font-black text-gold-250 leading-tight">
+                          {hijriMonthHeader}
+                        </h4>
+                        <div className="text-[11px] text-stone-300 font-medium mt-0.5 font-sans">
+                          {gregorianMonthHeader}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleNextMonth}
+                        className="p-1.5 rounded-xl hover:bg-white/10 text-gold-300 border border-gold-400/20 hover:border-gold-400/50 transition cursor-pointer"
+                        title={isArabic ? "الشهر التالي" : "Next Month"}
+                      >
+                        <ChevronRight className="w-5 h-5 rtl:rotate-180" />
+                      </button>
+                    </div>
+
+                    {/* Week Days Header */}
+                    <div className="grid grid-cols-7 gap-1 text-center font-bold text-[10px] sm:text-xs text-stone-500 dark:text-gold-400/70 border-b border-gold-400/10 pb-1.5 select-none">
+                      {weekDays.map((day) => (
+                        <div key={day} className="py-1 truncate">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Monthly Calendar Grid */}
+                    <div className="grid grid-cols-7 gap-1.5" id="calendar-grid-cells">
+                      {calendarDaysList.map((dayObj, idx) => {
+                        if (dayObj === null) {
+                          return <div key={`empty-${idx}`} className="bg-transparent aspect-square" />;
+                        }
+
+                        const { date, dayNum, hijri, occasion, isToday } = dayObj;
+                        return (
+                          <div
+                            key={date.toDateString()}
+                            className={`relative aspect-square p-1.5 rounded-xl border flex flex-col justify-between transition-all group select-none ${
+                              isToday
+                                ? "bg-amber-500/10 dark:bg-amber-500/15 border-gold-400 text-gold-900 dark:text-gold-200 scale-[1.02] shadow-sm font-black ring-1 ring-gold-400/30"
+                                : occasion
+                                  ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-500/20 dark:border-gold-500/15 text-[#113f28] dark:text-gold-300 hover:border-gold-400/40"
+                                  : "bg-white dark:bg-[#032014] border-stone-100 dark:border-gold-500/5 text-stone-800 dark:text-gold-200 hover:border-gold-400/20 hover:bg-stone-50 dark:hover:bg-emerald-950/30"
+                            }`}
+                            title={`${dayNum} ${gregorianMonthHeader} | ${hijri.day} ${hijri.monthAr} ${hijri.year} هـ`}
+                          >
+                            {/* Gregorian Day (Top Left) */}
+                            <span className="text-[9px] sm:text-[10px] font-sans font-semibold text-stone-400 dark:text-stone-500 group-hover:text-stone-600 dark:group-hover:text-stone-300">
+                              {dayNum}
+                            </span>
+
+                            {/* Hijri Day (Center Bottom) */}
+                            <span className="text-xs sm:text-sm font-black font-serif self-end leading-none text-emerald-800 dark:text-gold-300">
+                              {hijri.day}
+                            </span>
+
+                            {/* Holiday Dot Indicator */}
+                            {occasion && (
+                              <span className="absolute top-1 right-1 rtl:left-1 rtl:right-auto flex h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-400" />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Islamic Occasions List for current Gregorian Month */}
+                    <div className="pt-2">
+                      <h5 className="text-[11px] sm:text-xs font-black text-emerald-900 dark:text-gold-300 flex items-center gap-1.5 border-b border-gold-400/10 pb-1.5 mb-2.5">
+                        <span>🗓️</span>
+                        <span>
+                          {isArabic ? "المناسبات والأعياد الإسلامية لهذا الشهر" : "Islamic Occasions & Holidays This Month"}
+                        </span>
+                      </h5>
+
+                      {holidaysInMonth.length > 0 ? (
+                        <div className="space-y-2 max-h-[160px] overflow-y-auto custom-scrollbar pr-1">
+                          {holidaysInMonth.map((hol, idx) => (
+                            <div
+                              key={idx}
+                              className="p-2.5 rounded-xl bg-stone-50 dark:bg-emerald-950/30 border border-gold-450/10 flex items-start gap-2.5 hover:border-gold-400/25 transition"
+                            >
+                              <div className="text-base mt-0.5">🌟</div>
+                              <div className="flex-1">
+                                <p className="text-xs font-black text-[#113f28] dark:text-gold-200 leading-snug">
+                                  {isArabic ? hol.occasion.ar : hol.occasion.en}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1 text-[10px] font-medium text-stone-500 dark:text-gold-400/60 font-mono">
+                                  <span>📅 {hol.gregorianDate.toLocaleDateString(isArabic ? 'ar-EG' : 'en-US', { day: 'numeric', month: 'short' })}</span>
+                                  <span>•</span>
+                                  <span>🕌 {hol.hijri.day} {isArabic ? hol.hijri.monthAr : hol.hijri.monthEn}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-center italic text-stone-400 dark:text-gold-400/40 py-4 font-serif">
+                          {isArabic ? "لا توجد مناسبات رئيسية في هذا الشهر الفلكي." : "No major Islamic occasions in this astronomical month."}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Tab 2: INTERACTIVE QIBLA COMPASS */}
               {activeTab === "qibla" && (

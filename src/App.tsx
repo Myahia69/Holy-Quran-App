@@ -15,6 +15,7 @@ import SplashPage from './components/SplashPage';
 import DuaSidebarSection from './components/DuaSidebarSection';
 import PrayerTimesDialog from './components/PrayerTimesDialog';
 import TasbihDialog from './components/TasbihDialog';
+import IslamicAiDialog from './components/IslamicAiDialog';
 import DailyContemplationCard from './components/DailyContemplationCard';
 import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, MapPin, Layers, Sparkles, HelpCircle, AlertCircle, RefreshCw, History, X, Volume2 } from 'lucide-react';
@@ -132,6 +133,7 @@ export default function App() {
   const [isDuaDrawerOpen, setIsDuaDrawerOpen] = useState<boolean>(false);
   const [isPrayerTimesOpen, setIsPrayerTimesOpen] = useState<boolean>(false);
   const [isTasbihOpen, setIsTasbihOpen] = useState<boolean>(false);
+  const [isIslamicAiOpen, setIsIslamicAiOpen] = useState<boolean>(false);
 
   // Background Adhan Alerts Tracking
   const [activeAdhanAlert, setActiveAdhanAlert] = useState<{
@@ -565,6 +567,7 @@ export default function App() {
         onToggleMushaf={() => setMushafMode((m) => !m)}
         onOpenPrayerTimes={() => setIsPrayerTimesOpen(true)}
         onOpenTasbih={() => setIsTasbihOpen(true)}
+        onOpenIslamicAi={() => setIsIslamicAiOpen(true)}
       />
 
       {/* 2. Primary layout dashboard */}
@@ -874,8 +877,8 @@ export default function App() {
             
             <p className="font-serif font-black text-emerald-900 dark:text-gold-300 text-sm md:text-base tracking-wide leading-relaxed">
               {isArabic 
-                ? "تم عمل هذا الموقع بواسطة محمد يحيي محمد صبيح" 
-                : "This website was developed by Mohamed Yahya Mohamed Sabeeh"}
+                ? "بوابة القرآن الكريم العالمية" 
+                : "The Global Noble Quran Portal"}
             </p>
             
             <p className="text-[10px] text-stone-500 dark:text-gold-400/60 font-mono mt-1">
@@ -925,6 +928,12 @@ export default function App() {
       <TasbihDialog
         isOpen={isTasbihOpen}
         onClose={() => setIsTasbihOpen(false)}
+        isArabic={isArabic}
+      />
+
+      <IslamicAiDialog
+        isOpen={isIslamicAiOpen}
+        onClose={() => setIsIslamicAiOpen(false)}
         isArabic={isArabic}
       />
 
@@ -1034,18 +1043,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Persistent Floating Developer Attribution Badge */}
-      <div 
-        className="fixed bottom-28 md:bottom-24 left-4 z-40 flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/90 border-2 border-emerald-800 dark:border-gold-400 text-emerald-900 dark:text-gold-300 text-xs font-serif font-black shadow-2xl transition hover:scale-[1.03] duration-300"
-        id="floating-developer-badge"
-      >
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-amber-500 animate-pulse shrink-0" />
-        <span>
-          {isArabic 
-            ? "تطوير: محمد يحيي محمد صبيح" 
-            : "Dev: Mohamed Yahya"}
-        </span>
-      </div>
+
     </div>
   );
 }
