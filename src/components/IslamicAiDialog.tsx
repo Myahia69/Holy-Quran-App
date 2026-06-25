@@ -103,10 +103,34 @@ export default function IslamicAiDialog({ isOpen, onClose, isArabic }: IslamicAi
         }),
       });
 
-      const data = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      let data: any = null;
+
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const textResponse = await response.text();
+        if (
+          textResponse.includes('Action required to load your app') || 
+          textResponse.includes('security cookie') || 
+          textResponse.includes('blocking a required security cookie')
+        ) {
+          throw new Error(
+            isArabic
+              ? 'يبدو أن متصفحك يحظر ملفات تعريف الارتباط الأمنية المطلوبة (Security Cookies). يرجى فتح التطبيق في نافذة/علامة تبويب جديدة باستخدام زر الرابط الخارجي (في أعلى الصفحة)، أو السماح لملفات تعريف الارتباط في متصفحك لتفعيل الذكاء الاصطناعي.'
+              : 'It looks like your browser is blocking a required security cookie. Please open the app in a new tab by clicking the external link button at the top, or enable cookies in your browser to use the AI assistant.'
+          );
+        } else {
+          throw new Error(
+            isArabic
+              ? 'حدث خطأ في الاتصال بالخادم أو تم اعتراض الطلب. يرجى محاولة فتح التطبيق في نافذة/علامة تبويب جديدة.'
+              : 'A server error occurred or the request was blocked. Please try opening the app in a new tab.'
+          );
+        }
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || (isArabic ? 'حدث خطأ أثناء معالجة الطلب' : 'An error occurred during process'));
+        throw new Error(data?.error || (isArabic ? 'حدث خطأ أثناء معالجة الطلب' : 'An error occurred during process'));
       }
 
       const assistantMsg: Message = {
