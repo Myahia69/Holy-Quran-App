@@ -15,8 +15,8 @@ import SplashPage from './components/SplashPage';
 import DuaSidebarSection from './components/DuaSidebarSection';
 import PrayerTimesDialog from './components/PrayerTimesDialog';
 import TasbihDialog from './components/TasbihDialog';
-import IslamicAiDialog from './components/IslamicAiDialog';
 import DailyContemplationCard from './components/DailyContemplationCard';
+import DailyHadeethCard from './components/DailyHadeethCard';
 import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, MapPin, Layers, Sparkles, HelpCircle, AlertCircle, RefreshCw, History, X, Volume2 } from 'lucide-react';
 
@@ -133,7 +133,6 @@ export default function App() {
   const [isDuaDrawerOpen, setIsDuaDrawerOpen] = useState<boolean>(false);
   const [isPrayerTimesOpen, setIsPrayerTimesOpen] = useState<boolean>(false);
   const [isTasbihOpen, setIsTasbihOpen] = useState<boolean>(false);
-  const [isIslamicAiOpen, setIsIslamicAiOpen] = useState<boolean>(false);
 
   // Background Adhan Alerts Tracking
   const [activeAdhanAlert, setActiveAdhanAlert] = useState<{
@@ -567,7 +566,6 @@ export default function App() {
         onToggleMushaf={() => setMushafMode((m) => !m)}
         onOpenPrayerTimes={() => setIsPrayerTimesOpen(true)}
         onOpenTasbih={() => setIsTasbihOpen(true)}
-        onOpenIslamicAi={() => setIsIslamicAiOpen(true)}
       />
 
       {/* 2. Primary layout dashboard */}
@@ -797,6 +795,9 @@ export default function App() {
             onNavigateToVerse={handleNavigateToDuaVerse}
           />
 
+          {/* Daily Prophetic Hadeeth Card */}
+          <DailyHadeethCard isArabic={isArabic} />
+
           {/* Header metadata label */}
           {activeSurahDetail && (
             <div className="mb-8 p-7 rounded-3xl bg-gradient-to-r from-emerald-950 to-[#0c331f] dark:from-[#021810] dark:to-[#093521] border-2 border-gold-400 shadow-lg text-white flex flex-col md:flex-row md:items-center justify-between gap-5 relative overflow-hidden islamic-glow" id="active-surah-jumbotron">
@@ -928,12 +929,6 @@ export default function App() {
       <TasbihDialog
         isOpen={isTasbihOpen}
         onClose={() => setIsTasbihOpen(false)}
-        isArabic={isArabic}
-      />
-
-      <IslamicAiDialog
-        isOpen={isIslamicAiOpen}
-        onClose={() => setIsIslamicAiOpen(false)}
         isArabic={isArabic}
       />
 

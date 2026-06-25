@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Sun, Moon, Search, Sliders, Type, BookOpen, Bookmark, Volume2, Sparkles, Clock, CircleDot, Bot } from 'lucide-react';
+import { Sun, Moon, Search, Sliders, Type, BookOpen, Bookmark, Volume2, Sparkles, Clock, CircleDot } from 'lucide-react';
 import { Chapter } from '../types';
 
 interface HeaderProps {
@@ -26,7 +26,6 @@ interface HeaderProps {
   onToggleMushaf: () => void;
   onOpenPrayerTimes?: () => void;
   onOpenTasbih?: () => void;
-  onOpenIslamicAi?: () => void;
 }
 
 export default function Header({
@@ -47,7 +46,6 @@ export default function Header({
   onToggleMushaf,
   onOpenPrayerTimes,
   onOpenTasbih,
-  onOpenIslamicAi,
 }: HeaderProps) {
   const isArabic = activeLanguage === 'ar';
 
@@ -128,19 +126,6 @@ export default function Header({
           <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
           <span className="text-[10px] md:text-xs font-bold leading-none hidden sm:inline">
             {isArabic ? 'الأدعية' : 'Duas'}
-          </span>
-        </button>
-
-        {/* Islamic AI Assistant trigger */}
-        <button
-          id="header-islamic-ai-trigger"
-          onClick={onOpenIslamicAi}
-          title={isArabic ? 'المساعد الشرعي الذكي' : 'Islamic AI Scholar'}
-          className="p-1.5 md:p-2 text-emerald-900 dark:text-gold-300 hover:text-gold-500 bg-gold-400/5 hover:bg-gold-400/10 dark:bg-emerald-950/40 dark:hover:bg-gold-500/10 border border-gold-400/25 rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0"
-        >
-          <Bot className="w-4 h-4 text-emerald-700 dark:text-gold-350" />
-          <span className="text-[10px] md:text-xs font-bold leading-none hidden sm:inline">
-            {isArabic ? 'مساعد الذكاء الاصطناعي' : 'AI Scholar'}
           </span>
         </button>
 
