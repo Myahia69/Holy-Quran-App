@@ -96,6 +96,7 @@ export default function IslamicAiDialog({ isOpen, onClose, isArabic }: IslamicAi
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           prompt: text,
           history: chatHistory,
@@ -113,19 +114,13 @@ export default function IslamicAiDialog({ isOpen, onClose, isArabic }: IslamicAi
         if (
           textResponse.includes('Action required to load your app') || 
           textResponse.includes('security cookie') || 
-          textResponse.includes('blocking a required security cookie')
+          textResponse.includes('blocking a required security cookie') ||
+          textResponse.includes('<!DOCTYPE html>') ||
+          textResponse.includes('<html')
         ) {
-          throw new Error(
-            isArabic
-              ? 'يبدو أن متصفحك يحظر ملفات تعريف الارتباط الأمنية المطلوبة (Security Cookies). يرجى فتح التطبيق في نافذة/علامة تبويب جديدة باستخدام زر الرابط الخارجي (في أعلى الصفحة)، أو السماح لملفات تعريف الارتباط في متصفحك لتفعيل الذكاء الاصطناعي.'
-              : 'It looks like your browser is blocking a required security cookie. Please open the app in a new tab by clicking the external link button at the top, or enable cookies in your browser to use the AI assistant.'
-          );
+          throw new Error('COOKIE_RESTRICTION_ERROR');
         } else {
-          throw new Error(
-            isArabic
-              ? 'حدث خطأ في الاتصال بالخادم أو تم اعتراض الطلب. يرجى محاولة فتح التطبيق في نافذة/علامة تبويب جديدة.'
-              : 'A server error occurred or the request was blocked. Please try opening the app in a new tab.'
-          );
+          throw new Error('SERVER_CONNECTION_ERROR');
         }
       }
 
@@ -331,9 +326,71 @@ export default function IslamicAiDialog({ isOpen, onClose, isArabic }: IslamicAi
 
             {/* Error box */}
             {error && (
-              <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{error}</span>
+              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs flex flex-col gap-3">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                  <span>
+                    {error === 'COOKIE_RESTRICTION_ERROR' 
+                      ? (isArabic ? 'تنبيه أمني هام: حظر ملفات تعريف الارتباط' : 'Security Notice: Cookies Blocked')
+                      : (isArabic ? 'تنبيه الاتصال أو انقطاع الجلسة' : 'Connection or Session Interruption')}
+                  </span>
+                </div>
+                
+                {error === 'COOKIE_RESTRICTION_ERROR' ? (
+                  <div className="space-y-3 text-stone-700 dark:text-gold-250 leading-relaxed text-xs">
+                    <p className="font-semibold text-emerald-950 dark:text-gold-150">
+                      {isArabic 
+                        ? 'يبدو أن متصفحك يحظر ملفات تعريف الارتباط الأمنية (Security Cookies). يرجع ذلك غالباً لاستخدام متصفح الآيفون/السفاري (Safari/iOS) أو وضع التصفح الخفي الذي يمنع نقل الجلسة الآمنة داخل معاينة المطورين.'
+                        : 'Your browser is blocking required security cookies. This is common when using Safari/iOS or Incognito mode inside developer iframes.'}
+                    </p>
+                    <div className="p-3 bg-gold-400/5 dark:bg-emerald-950/20 border border-gold-400/20 rounded-xl space-y-1 text-[11px] font-sans">
+                      <p className="font-bold text-emerald-900 dark:text-gold-300">
+                        {isArabic ? '💡 لحل المشكلة فوراً وبسهولة تامة:' : '💡 Simple Steps to Fix This:'}
+                      </p>
+                      <ol className="list-decimal list-inside space-y-1">
+                        {isArabic ? (
+                          <>
+                            <li>اضغط على الزر الذهبي أدناه لفتح التطبيق بالكامل في علامة تبويب مستقلة.</li>
+                            <li>إذا ظهرت لك صفحة بيضاء تطلب الإذن، اضغط على زر <b>Authenticate</b> أو <b>Grant permission</b> للتأكيد.</li>
+                            <li>ارجع إلى التطبيق وستعمل ميزات الذكاء الاصطناعي والتقويم بكفاءة تامة!</li>
+                          </>
+                        ) : (
+                          <>
+                            <li>Click the golden button below to open the app in a full, standalone tab.</li>
+                            <li>If prompted on a blank page, click <b>Authenticate</b> or <b>Grant permission</b>.</li>
+                            <li>The AI and Calendar will work perfectly in that new tab!</li>
+                          </>
+                        )}
+                      </ol>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => window.open(window.location.href, '_blank')}
+                      className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-500 to-gold-500 hover:from-amber-600 hover:to-gold-600 text-emerald-950 font-black text-xs rounded-xl shadow-md transition transform active:scale-95 flex items-center justify-center gap-2 cursor-pointer border border-gold-400/30"
+                    >
+                      <span>🌐</span>
+                      <span>{isArabic ? 'فتح التطبيق في صفحة مستقلة كاملة وتفعيل الذكاء الاصطناعي' : 'Open App in Standalone Tab & Enable AI'}</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="leading-normal">
+                      {error === 'SERVER_CONNECTION_ERROR'
+                        ? (isArabic 
+                            ? 'حدث خطأ غير متوقع أثناء الاتصال بالخادم. قد يكون ذلك بسبب انتهاء صلاحية الجلسة الآمنة أو حظر ملفات تعريف الارتباط.' 
+                            : 'An unexpected connection error occurred. Your session may have expired or cookies are blocked.')
+                        : error}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => window.open(window.location.href, '_blank')}
+                      className="w-full py-2 px-3 bg-gradient-to-r from-amber-500 to-gold-500 hover:from-amber-600 text-emerald-950 font-black text-xs rounded-xl shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer border border-gold-400/20"
+                    >
+                      <span>🌐</span>
+                      <span>{isArabic ? 'فتح في علامة تبويب مستقلة كاملة للتنشيط' : 'Open in Standalone Tab to Enable'}</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

@@ -546,6 +546,7 @@ export default function PrayerTimesDialog({ isOpen, onClose, isArabic }: PrayerT
       const res = await fetch("/api/prayer-times", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           location: queryLocation,
           date: formattedDate,
@@ -553,9 +554,17 @@ export default function PrayerTimesDialog({ isOpen, onClose, isArabic }: PrayerT
         }),
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get("content-type") || "";
+      let data: any = null;
+
+      if (contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        throw new Error("HTML response received instead of JSON (likely cookie block). Triggering Aladhan API fallback.");
+      }
+
       if (!res.ok) {
-        throw new Error(data.error || "Failed to fetch prayer times.");
+        throw new Error(data?.error || "Failed to fetch prayer times.");
       }
 
       setPrayerData(data);
